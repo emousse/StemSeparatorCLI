@@ -1,0 +1,36 @@
+# Core GUI Framework
+PySide6>=6.6.0
+
+# Audio Separation
+audio-separator>=0.20.0
+
+# System Audio Recording
+soundcard>=0.4.2
+
+# Audio Processing
+numpy>=1.24.0
+soundfile>=0.12.1
+librosa>=0.10.0
+pydub>=0.25.1
+resampy>=0.4.2
+
+# ML Models
+torch>=2.0.0
+torchaudio>=2.0.0
+onnxruntime>=1.16.0
+
+# Utilities
+requests>=2.31.0
+tqdm>=4.66.0
+colorlog>=6.8.0
+PyYAML>=6.0.0
+
+# Testing
+pytest>=7.4.0
+pytest-qt>=4.2.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+
+# Development
+black>=23.0.0
+flake8>=6.0.0

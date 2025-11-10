@@ -1,0 +1,74 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment (venv)
+venv/
+ENV/
+env/
+.venv
+
+# Conda
+.conda/
+envs/
+
+# PyCharm
+.idea/
+
+# VSCode
+.vscode/
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+
+# Audio files (optional - remove if you want to commit test audio)
+*.wav
+*.mp3
+*.flac
+*.m4a
+*.ogg
+*.aac
+
+# Models (diese sind groß und sollten nicht committed werden)
+resources/models/*
+!resources/models/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+
+# User settings
+.env
+config_local.py
