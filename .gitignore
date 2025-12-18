@@ -6,7 +6,8 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/
+dist/StemSeparator.app/
+dist/StemSeparator/
 downloads/
 eggs/
 .eggs/
