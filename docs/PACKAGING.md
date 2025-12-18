@@ -287,6 +287,7 @@ For professional distribution without security warnings:
 
 **1. Sign the application:**
 ```bash
+# Replace "Your Name (TEAM_ID)" with your actual Apple Developer ID
 codesign --deep --force --verify --verbose \
   --sign "Developer ID Application: Your Name (TEAM_ID)" \
   --options runtime \
@@ -300,6 +301,7 @@ hdiutil create -volname "Stem Separator" \
   -ov -format UDZO \
   dist/StemSeparator-signed.dmg
 
+# Replace "Your Name (TEAM_ID)" with your actual Apple Developer ID
 codesign --sign "Developer ID Application: Your Name (TEAM_ID)" \
   dist/StemSeparator-signed.dmg
 ```

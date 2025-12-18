@@ -242,8 +242,9 @@ For professional distribution without security warnings:
 2. **Get Developer ID certificate**
 3. **Sign the application:**
    ```bash
+   # Replace "Your Name (TEAM_ID)" with your actual Apple Developer ID
    codesign --deep --force --verify --verbose \
-     --sign "Developer ID Application: Your Name" \
+     --sign "Developer ID Application: Your Name (TEAM_ID)" \
      --options runtime \
      dist/StemSeparator.app
    ```
