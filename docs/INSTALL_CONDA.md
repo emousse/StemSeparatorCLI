@@ -179,7 +179,8 @@ Füge dies zu deiner `~/.zshrc` oder `~/.bashrc` hinzu:
 
 ```bash
 # Auto-activate stem-separator in diesem Verzeichnis
-if [ -f "/Users/moritzbruder/Documents/04_Python/StemSeparator/environment.yml" ]; then
+# Replace /path/to/StemSeparator with your actual repository path
+if [ -f "/path/to/StemSeparator/environment.yml" ]; then
     conda activate stem-separator 2>/dev/null
 fi
 ```

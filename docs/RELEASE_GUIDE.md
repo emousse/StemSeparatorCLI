@@ -37,7 +37,7 @@ This guide will walk you through creating your first GitHub release for Stem Sep
 
 ### Build Intel Version
 ```bash
-cd /Users/moritzbruder/Documents/04_Python/StemSeparator
+cd "$(git rev-parse --show-toplevel)"  # Navigate to repository root
 ./packaging/build_intel.sh
 ```
 
