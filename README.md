@@ -311,8 +311,8 @@ pytest tests/ui/
 
 ## 📚 Documentation
 
+- **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)**: Comprehensive user guide for end users
 - **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**: Technical development documentation
-- **[docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md)**: Current project status
 - **[docs/ENSEMBLE_FEATURE.md](docs/ENSEMBLE_FEATURE.md)**: Ensemble separation feature
 - **[docs/PACKAGING.md](docs/PACKAGING.md)**: Packaging guide
 - **[docs/INSTALL_CONDA.md](docs/INSTALL_CONDA.md)**: Detailed Conda installation

@@ -291,11 +291,13 @@ pytest tests/ui/
 
 ## 📚 Dokumentation
 
-- **[DEVELOPMENT.md](docs/DEVELOPMENT.md)**: Technische Entwicklungsdokumentation
-- **[PROJECT_STATUS.md](docs/PROJECT_STATUS.md)**: Aktueller Projekt-Status
-- **[ENSEMBLE_FEATURE.md](docs/ENSEMBLE_FEATURE.md)**: Ensemble-Separation Feature
-- **[PACKAGING.md](PACKAGING.md)**: Packaging-Anleitung
-- **[INSTALL_CONDA.md](INSTALL_CONDA.md)**: Detaillierte Conda-Installation
+- **[docs/BENUTZERANLEITUNG.md](docs/BENUTZERANLEITUNG.md)**: Umfassende Benutzeranleitung für Endanwender
+- **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**: Technische Entwicklungsdokumentation
+- **[docs/ENSEMBLE_FEATURE.md](docs/ENSEMBLE_FEATURE.md)**: Ensemble-Separation Feature
+- **[docs/PACKAGING.md](docs/PACKAGING.md)**: Packaging-Anleitung
+- **[docs/INSTALL_CONDA.md](docs/INSTALL_CONDA.md)**: Detaillierte Conda-Installation
+- **[CONTRIBUTING.md](CONTRIBUTING.md)**: Richtlinien für Beiträge
+- **[CHANGELOG.md](CHANGELOG.md)**: Versionshistorie
 
 ---
 

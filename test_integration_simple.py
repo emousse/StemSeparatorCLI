@@ -12,7 +12,7 @@ import soundfile as sf
 from pathlib import Path
 
 # Add project to path
-sys.path.insert(0, '/Users/moritzbruder/Documents/04_Python/StemSeparator')
+sys.path.insert(0, str(Path(__file__).parent))
 
 from core.background_stretch_manager import BackgroundStretchManager
 from PySide6.QtWidgets import QApplication

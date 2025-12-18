@@ -304,7 +304,7 @@ AVAILABLE_LANGUAGES = ["de", "en"]
 # App-Metadaten
 APP_NAME = "Stem Separator"
 APP_VERSION = "1.0.0"
-APP_AUTHOR = "Your Name"
+APP_AUTHOR = "StemSeparator"
 
 # File Size Limits (optional warnings)
 WARN_FILE_SIZE_MB = 50  # Warnung bei großen Dateien

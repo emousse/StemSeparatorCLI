@@ -84,3 +84,17 @@ packaging/dmg/background.png
 # Swift build artifacts
 packaging/screencapture_tool/.build/
 packaging/screencapture_tool/ScreenCaptureRecorder.app
+
+# BeatNet service build artifacts
+packaging/beatnet_service/dist/
+packaging/beatnet_service/build/
+
+# Runtime files
+.stemseparator.lock
+*.lock
+
+# Experimental/unfinished features
+potential_features/
+
+# Claude Code settings
+.claude/
