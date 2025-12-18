@@ -6,8 +6,6 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/StemSeparator.app/
-dist/StemSeparator/
 downloads/
 eggs/
 .eggs/
@@ -77,9 +75,9 @@ user_settings.json
 
 # PyInstaller / Packaging
 # Note: .spec files ARE tracked (they're build configuration)
-dist/
+dist/StemSeparator.app/
+dist/StemSeparator/
 build/
-*.dmg
 *.app
 packaging/icon.icns
 packaging/dmg/background.png
