@@ -2,6 +2,8 @@
 Device Manager für GPU/CPU Detection und Management
 """
 
+from __future__ import annotations
+
 import platform
 from typing import Optional, Dict
 from dataclasses import dataclass
@@ -88,7 +90,9 @@ class DeviceManager:
             try:
                 memory_bytes = self._torch.cuda.get_device_properties(0).total_memory
                 memory_gb = memory_bytes / (1024**3)
-            except:
+            except (AttributeError, RuntimeError, IndexError) as e:
+                # Device may not have accessible memory properties
+                self.logger.debug(f"Could not get CUDA memory: {e}")
                 memory_gb = None
 
             self._device_info["cuda"] = DeviceInfo(
@@ -280,23 +284,3 @@ def get_device_manager() -> DeviceManager:
     if _device_manager is None:
         _device_manager = DeviceManager()
     return _device_manager
-
-
-if __name__ == "__main__":
-    # Test
-    dm = DeviceManager()
-
-    print("=== Device Manager ===")
-    print(f"Current device: {dm.get_device()}")
-    print(f"GPU available: {dm.is_gpu_available()}")
-
-    print("\nAvailable devices:")
-    for device in dm.list_available_devices():
-        print(f"  - {device.name}: {device.description}")
-        if device.memory_gb:
-            print(f"    Memory: {device.memory_gb:.2f} GB")
-
-    print("\nSystem info:")
-    import json
-
-    print(json.dumps(dm.get_system_info(), indent=2))

@@ -6,6 +6,8 @@ CONTEXT: Uses sounddevice for simple, reliable audio playback of pre-loaded audi
 MIGRATION: Migrated from rtmixer to sounddevice.play() for simpler implementation
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Optional, Dict, Callable
 from dataclasses import dataclass
@@ -14,6 +16,7 @@ import threading
 import time
 import numpy as np
 import soundfile as sf
+from concurrent.futures import ThreadPoolExecutor
 
 from config import RECORDING_SAMPLE_RATE
 from utils.logger import get_logger
@@ -95,6 +98,9 @@ class AudioPlayer:
         self._position_lock = threading.Lock()
         self._update_thread: Optional[threading.Thread] = None
         self._stop_update = threading.Event()
+
+        # Thread pool for async operations (reduces thread creation overhead)
+        self._thread_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="player")
 
         # Callbacks
         self.position_callback: Optional[Callable[[float, float], None]] = (
@@ -311,11 +317,8 @@ class AudioPlayer:
             self.logger.debug(
                 f"Seeking from {old_position} to {position_samples} samples"
             )
-            # Run restart in a separate thread to prevent blocking
-            restart_thread = threading.Thread(
-                target=self._async_seek_restart, daemon=True
-            )
-            restart_thread.start()
+            # Run restart in thread pool to prevent blocking (short-lived task)
+            self._thread_pool.submit(self._async_seek_restart)
         # Note: If stopped, position is updated but playback doesn't restart
         # User can click Play to start from the new position
 
@@ -329,8 +332,8 @@ class AudioPlayer:
         try:
             # Cancel all current playback
             self._cancel_all_actions()
-            # Small delay to ensure stop completed
-            time.sleep(0.05)
+            # Minimal delay to ensure stop completed (reduced from 50ms to 10ms)
+            time.sleep(0.01)
             # Start playback from new position
             self._start_playback_from_position()
         except Exception as e:
@@ -1142,12 +1145,18 @@ class AudioPlayer:
         """Cleanup resources"""
         self.stop()
 
+        # Shutdown thread pool (wait for active tasks to complete)
+        if hasattr(self, '_thread_pool'):
+            self._thread_pool.shutdown(wait=True, cancel_futures=False)
+            self.logger.debug("Thread pool shut down")
+
         # Stop any ongoing sounddevice playback
         if self._sounddevice_module:
             try:
                 self._sounddevice_module.stop()
-            except:
-                pass
+            except (RuntimeError, AttributeError) as e:
+                # Ignore errors during cleanup - sounddevice may not be playing
+                logger.debug(f"Error stopping sounddevice during cleanup: {e}")
 
         self.stems.clear()
         self.stem_settings.clear()

@@ -5,6 +5,8 @@ PURPOSE: Allow users to play back separated stems with individual volume/mute/so
 CONTEXT: Provides mixing interface for separated audio stems with real-time playback.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple
 import numpy as np
@@ -30,9 +32,9 @@ from PySide6.QtWidgets import (
     QCheckBox,
 )
 from PySide6.QtCore import Qt, Signal, Slot, QTimer, QRunnable, QThreadPool, QObject
-from PySide6.QtGui import QDragEnterEvent, QDropEvent
 
 from ui.app_context import AppContext
+from ui.widgets.common import DragDropListWidget
 from core.player import get_player, PlaybackState
 from ui.theme import ThemeManager
 from ui.dialogs import ExportSettingsDialog, LoopExportDialog
@@ -43,51 +45,6 @@ from utils import beat_detection
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from core.background_stretch_manager import BackgroundStretchManager
-
-
-class DragDropListWidget(QListWidget):
-    """
-    QListWidget with drag-and-drop support for audio files
-
-    WHY: QListWidget doesn't support drag-and-drop by default for external files
-    """
-
-    files_dropped = Signal(list)  # Emits list of Path objects
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setAcceptDrops(True)
-
-    def dragEnterEvent(self, event: QDragEnterEvent):
-        """Accept drag events with file URLs"""
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-        else:
-            event.ignore()
-
-    def dragMoveEvent(self, event):
-        """Accept drag move events with file URLs"""
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-        else:
-            event.ignore()
-
-    def dropEvent(self, event: QDropEvent):
-        """Handle dropped files"""
-        if event.mimeData().hasUrls():
-            file_paths = []
-            for url in event.mimeData().urls():
-                file_path = Path(url.toLocalFile())
-                if file_path.exists() and file_path.is_file():
-                    file_paths.append(file_path)
-
-            if file_paths:
-                self.files_dropped.emit(file_paths)
-                event.acceptProposedAction()
-            else:
-                event.ignore()
-        else:
-            event.ignore()
 
 
 class BeatAnalysisWorker(QRunnable):
@@ -344,6 +301,9 @@ class PlayerWidget(QWidget):
         self.time_stretch_target_bpm: int = 120
         self.stretch_manager: Optional['BackgroundStretchManager'] = None
         self._loop_index_mapping: Dict[int, int] = {}  # Maps original loop index to filtered index
+        self._stretched_playback_active: bool = False  # Track if stretched loop is currently playing
+        self._stretched_playback_loop_index: int = -1  # Track which loop is playing
+        self._stretched_playback_repeat: bool = False  # Track if playback is in repeat mode
 
         # Beat analysis countdown timer
         self._beat_analysis_timer = QTimer(self)
@@ -368,6 +328,80 @@ class PlayerWidget(QWidget):
         self._update_button_states()
 
         self.ctx.logger().info("PlayerWidget initialized with real playback")
+
+    def keyPressEvent(self, event):
+        """
+        Handle keyboard shortcuts for player control
+
+        Shortcuts:
+        - Space: Play/Pause toggle
+        - Left Arrow: Seek backward 5 seconds
+        - Right Arrow: Seek forward 5 seconds
+        - Up Arrow: Increase master volume
+        - Down Arrow: Decrease master volume
+        - Ctrl+S: Export audio
+        """
+        from PySide6.QtGui import QKeyEvent
+        from PySide6.QtCore import Qt
+
+        # Space: Play/Pause toggle
+        if event.key() == Qt.Key_Space:
+            if self.player.state == PlaybackState.PLAYING:
+                self._on_pause()
+            elif self.btn_play.isEnabled():
+                self._on_play()
+            event.accept()
+            return
+
+        # Left Arrow: Seek backward 5 seconds
+        elif event.key() == Qt.Key_Left:
+            if self.position_slider.isEnabled():
+                current = self.position_slider.value()
+                # Position is in milliseconds
+                new_pos = max(0, current - 5000)
+                self.position_slider.setValue(new_pos)
+                # Trigger the seek
+                if hasattr(self, '_on_slider_released'):
+                    self._on_slider_released()
+            event.accept()
+            return
+
+        # Right Arrow: Seek forward 5 seconds
+        elif event.key() == Qt.Key_Right:
+            if self.position_slider.isEnabled():
+                current = self.position_slider.value()
+                max_val = self.position_slider.maximum()
+                new_pos = min(max_val, current + 5000)
+                self.position_slider.setValue(new_pos)
+                # Trigger the seek
+                if hasattr(self, '_on_slider_released'):
+                    self._on_slider_released()
+            event.accept()
+            return
+
+        # Up Arrow: Increase volume
+        elif event.key() == Qt.Key_Up:
+            current = self.master_slider.value()
+            self.master_slider.setValue(min(100, current + 5))
+            event.accept()
+            return
+
+        # Down Arrow: Decrease volume
+        elif event.key() == Qt.Key_Down:
+            current = self.master_slider.value()
+            self.master_slider.setValue(max(0, current - 5))
+            event.accept()
+            return
+
+        # Ctrl+S: Export
+        elif event.key() == Qt.Key_S and event.modifiers() & Qt.ControlModifier:
+            if self.stem_files:
+                self._on_export()
+            event.accept()
+            return
+
+        # Pass other keys to parent
+        super().keyPressEvent(event)
 
     def _extract_bpm_summary(self, conf_msg: str) -> Optional[str]:
         """
@@ -2021,6 +2055,11 @@ class PlayerWidget(QWidget):
         except Exception:
             pass  # sounddevice might not be available
         
+        # Reset stretched playback tracking
+        self._stretched_playback_active = False
+        self._stretched_playback_loop_index = -1
+        self._stretched_playback_repeat = False
+        
         self.btn_stop_loop.setEnabled(False)
 
         if self.selected_loop_index >= 0:
@@ -2031,6 +2070,23 @@ class PlayerWidget(QWidget):
             self.loop_playback_info_label.setText("Playback stopped")
 
         self.ctx.logger().info("Loop playback stopped")
+
+    def get_stretch_manager(self) -> Optional['BackgroundStretchManager']:
+        """
+        Get the background stretch manager instance.
+        
+        PURPOSE: Provide centralized access to stretch manager for other widgets
+        CONTEXT: Manager is lazily initialized on first access
+        
+        Returns:
+            BackgroundStretchManager instance or None if initialization fails
+        """
+        if not self.stretch_manager:
+            from core.background_stretch_manager import BackgroundStretchManager, get_optimal_worker_count
+            self.stretch_manager = BackgroundStretchManager(max_workers=get_optimal_worker_count())
+            self.stretch_manager.progress_updated.connect(self._on_stretch_progress_updated)
+            self.stretch_manager.all_completed.connect(self._on_stretch_all_completed)
+        return self.stretch_manager
 
     @Slot(bool)
     def _on_time_stretch_enabled_changed(self, enabled: bool):
@@ -2105,12 +2161,11 @@ class PlayerWidget(QWidget):
                 f"Only {len(valid_loops)} loop(s) will be processed."
             )
         
-        # Initialize stretch manager if needed
-        if not self.stretch_manager:
-            from core.background_stretch_manager import BackgroundStretchManager, get_optimal_worker_count
-            self.stretch_manager = BackgroundStretchManager(max_workers=get_optimal_worker_count())
-            self.stretch_manager.progress_updated.connect(self._on_stretch_progress_updated)
-            self.stretch_manager.all_completed.connect(self._on_stretch_all_completed)
+        # Get stretch manager (lazy initialization)
+        stretch_manager = self.get_stretch_manager()
+        if not stretch_manager:
+            QMessageBox.warning(self, "Error", "Could not initialize stretch manager.")
+            return
         
         # Start batch processing
         self.stretch_progress_bar.setVisible(True)
@@ -2118,7 +2173,7 @@ class PlayerWidget(QWidget):
         self.stretch_progress_bar.setFormat("Starting...")
         self.btn_start_stretch_processing.setEnabled(False)
         
-        self.stretch_manager.start_batch(
+        stretch_manager.start_batch(
             stem_files=self.stem_files,
             loop_segments=valid_loops,
             original_bpm=original_bpm,
@@ -2483,6 +2538,11 @@ class PlayerWidget(QWidget):
                 # Transpose to (samples, channels) for sounddevice
                 mixed_transposed = mixed_audio.T
                 sd.play(mixed_transposed, samplerate=44100, blocking=False)
+            
+            # Track stretched playback state
+            self._stretched_playback_active = True
+            self._stretched_playback_loop_index = loop_index
+            self._stretched_playback_repeat = repeat
             
             self.btn_stop_loop.setEnabled(True)
             self.loop_playback_info_label.setText(
@@ -2964,16 +3024,28 @@ class PlayerWidget(QWidget):
         # Convert 0-100 to 0.0-1.0
         volume_float = volume / 100.0
         self.player.set_stem_volume(stem_name, volume_float)
+        
+        # Restart stretched playback if active to apply volume changes
+        if self._stretched_playback_active and self.time_stretch_enabled:
+            self._restart_stretched_playback()
 
     @Slot(str, bool)
     def _on_stem_mute_changed(self, stem_name: str, is_muted: bool):
         """Handle stem mute change"""
         self.player.set_stem_mute(stem_name, is_muted)
+        
+        # Restart stretched playback if active to apply mute changes
+        if self._stretched_playback_active and self.time_stretch_enabled:
+            self._restart_stretched_playback()
 
     @Slot(str, bool)
     def _on_stem_solo_changed(self, stem_name: str, is_solo: bool):
         """Handle stem solo change"""
         self.player.set_stem_solo(stem_name, is_solo)
+        
+        # Restart stretched playback if active to apply solo changes
+        if self._stretched_playback_active and self.time_stretch_enabled:
+            self._restart_stretched_playback()
 
     @Slot()
     def _on_master_volume_changed(self):
@@ -2982,6 +3054,33 @@ class PlayerWidget(QWidget):
         volume_float = volume / 100.0
         self.player.set_master_volume(volume_float)
         self.master_label.setText(f"{volume}%")
+        
+        # Restart stretched playback if active to apply volume changes
+        if self._stretched_playback_active and self.time_stretch_enabled:
+            self._restart_stretched_playback()
+    
+    def _restart_stretched_playback(self):
+        """
+        Restart stretched loop playback with current mute/solo/volume settings.
+        
+        WHY: When mute/solo/volume changes, we need to remix the stretched loops
+             and restart playback to apply the changes immediately.
+        """
+        if not self._stretched_playback_active:
+            return
+        
+        loop_index = self._stretched_playback_loop_index
+        repeat = self._stretched_playback_repeat
+        
+        # Stop current playback
+        try:
+            import sounddevice as sd
+            sd.stop()
+        except Exception:
+            pass
+        
+        # Restart playback with new mix (this will apply current mute/solo/volume settings)
+        self._play_stretched_loop_segment(loop_index, repeat=repeat)
 
     @Slot()
     def _on_play(self):

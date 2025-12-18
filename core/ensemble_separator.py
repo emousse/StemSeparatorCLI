@@ -1,7 +1,7 @@
 """
 Ensemble Separator - Kombiniert mehrere Modelle für höchste Qualität
 
-PURPOSE: Nutzt die Stärken verschiedener Modelle (z.B. Mel-RoFormer für Vocals,
+PURPOSE: Nutzt die Stärken verschiedener Modelle (z.B. BS-RoFormer für Vocals,
          Demucs für Drums) durch stem-spezifische Gewichtung
 CONTEXT: Erreicht +0.5-1.0 dB SDR Verbesserung durch Model-Ensembles
 """
@@ -13,16 +13,17 @@ import numpy as np
 import soundfile as sf
 import librosa
 
-from config import ENSEMBLE_CONFIGS, DEFAULT_ENSEMBLE_CONFIG, MODELS, TEMP_DIR
+from config import (
+    ENSEMBLE_CONFIGS,
+    DEFAULT_ENSEMBLE_CONFIG,
+    DEFAULT_SAMPLE_RATE,
+    MODELS,
+    TEMP_DIR,
+)
 from core.separator import Separator, SeparationResult
 from utils.logger import get_logger
 
 logger = get_logger()
-
-# CRITICAL: Universal sample rate for all models and processing
-# WHY: Mel-RoFormer and BS-RoFormer require 44100 Hz (hardcoded in model architecture)
-#      All models must output at this exact rate to prevent timing drift/desynchronization
-TARGET_SAMPLE_RATE = 44100
 
 
 class EnsembleSeparator:
@@ -30,9 +31,9 @@ class EnsembleSeparator:
     Ensemble-basierte Stem Separation für höchste Qualität
 
     Kombiniert mehrere Modelle mit stem-spezifischen Gewichten:
-    - Mel-RoFormer: Beste für Vocals (Gewicht 0.45)
-    - BS-RoFormer: Ausgeglichen (Gewicht 0.35)
-    - Demucs: Beste für Drums (Gewicht 0.50)
+    - BS-RoFormer: Beste für Vocals (SDR 12.9, Gewicht 0.40-0.45)
+    - MDX-Net: Schnelle Vocal-Extraktion (Gewicht 0.40)
+    - Demucs: Beste für Drums/Bass/Other (Gewicht 0.50-0.60)
 
     Erreicht State-of-the-Art Qualität durch intelligentes Ensembling.
     """
@@ -100,17 +101,17 @@ class EnsembleSeparator:
                 )
                 mix_audio = mix_audio_arr.T  # (channels, samples)
 
-                # CRITICAL: Resample mix to TARGET_SAMPLE_RATE if needed
+                # CRITICAL: Resample mix to DEFAULT_SAMPLE_RATE if needed
                 # WHY: All processing must happen at 44100 Hz to prevent timing drift
-                if mix_sample_rate != TARGET_SAMPLE_RATE:
+                if mix_sample_rate != DEFAULT_SAMPLE_RATE:
                     self.logger.info(
-                        f"Resampling input mix from {mix_sample_rate} Hz to {TARGET_SAMPLE_RATE} Hz "
+                        f"Resampling input mix from {mix_sample_rate} Hz to {DEFAULT_SAMPLE_RATE} Hz "
                         f"(required for ensemble processing)"
                     )
                     mix_audio = self._resample_audio_array(
-                        mix_audio, mix_sample_rate, TARGET_SAMPLE_RATE
+                        mix_audio, mix_sample_rate, DEFAULT_SAMPLE_RATE
                     )
-                    mix_sample_rate = TARGET_SAMPLE_RATE
+                    mix_sample_rate = DEFAULT_SAMPLE_RATE
             except Exception as e:
                 self.logger.warning(
                     f"Could not load mixture for mask blending: {e}. Falling back to waveform averaging."
@@ -227,17 +228,17 @@ class EnsembleSeparator:
             # Transpose to (samples, channels) for soundfile
             audio_to_save = audio_data.T
 
-            # CRITICAL: Always use TARGET_SAMPLE_RATE (44100 Hz)
+            # CRITICAL: Always use DEFAULT_SAMPLE_RATE (44100 Hz)
             # WHY: Prevents timing drift from sample rate mismatches between models
             #      Beat grid is calculated at 44100 Hz and must stay consistent
-            if combined_sr and combined_sr != TARGET_SAMPLE_RATE:
+            if combined_sr and combined_sr != DEFAULT_SAMPLE_RATE:
                 self.logger.warning(
-                    f"Combined SR {combined_sr} Hz differs from target {TARGET_SAMPLE_RATE} Hz. "
+                    f"Combined SR {combined_sr} Hz differs from target {DEFAULT_SAMPLE_RATE} Hz. "
                     f"This indicates a bug in sample rate handling!"
                 )
 
             sf.write(
-                str(output_file), audio_to_save, TARGET_SAMPLE_RATE, subtype="PCM_16"
+                str(output_file), audio_to_save, DEFAULT_SAMPLE_RATE, subtype="PCM_16"
             )
 
             final_stems[stem_name] = output_file
@@ -285,17 +286,17 @@ class EnsembleSeparator:
             )
             mix_audio = mix_audio_arr.T  # (channels, samples)
 
-            # CRITICAL: Resample mix to TARGET_SAMPLE_RATE if needed
+            # CRITICAL: Resample mix to DEFAULT_SAMPLE_RATE if needed
             # WHY: All processing must happen at 44100 Hz to prevent timing drift
-            if mix_sample_rate != TARGET_SAMPLE_RATE:
+            if mix_sample_rate != DEFAULT_SAMPLE_RATE:
                 self.logger.info(
-                    f"Resampling input mix from {mix_sample_rate} Hz to {TARGET_SAMPLE_RATE} Hz "
+                    f"Resampling input mix from {mix_sample_rate} Hz to {DEFAULT_SAMPLE_RATE} Hz "
                     f"(required for ensemble processing)"
                 )
                 mix_audio = self._resample_audio_array(
-                    mix_audio, mix_sample_rate, TARGET_SAMPLE_RATE
+                    mix_audio, mix_sample_rate, DEFAULT_SAMPLE_RATE
                 )
-                mix_sample_rate = TARGET_SAMPLE_RATE
+                mix_sample_rate = DEFAULT_SAMPLE_RATE
         except Exception as e:
             error_msg = f"Failed to load mix for staged ensemble: {e}"
             self.logger.error(error_msg)
@@ -414,22 +415,22 @@ class EnsembleSeparator:
         output_dir.mkdir(parents=True, exist_ok=True)
         final_stems = {}
 
-        # save vocals (mix_sample_rate is now guaranteed to be TARGET_SAMPLE_RATE)
+        # save vocals (mix_sample_rate is now guaranteed to be DEFAULT_SAMPLE_RATE)
         vocals_path = output_dir / f"{audio_file.stem}_(vocals).wav"
-        sf.write(str(vocals_path), vocals_audio.T, TARGET_SAMPLE_RATE, subtype="PCM_16")
+        sf.write(str(vocals_path), vocals_audio.T, DEFAULT_SAMPLE_RATE, subtype="PCM_16")
         final_stems["vocals"] = vocals_path
 
         # CRITICAL: Validate residual sample rate
-        if combined_residual_sr and combined_residual_sr != TARGET_SAMPLE_RATE:
+        if combined_residual_sr and combined_residual_sr != DEFAULT_SAMPLE_RATE:
             self.logger.warning(
-                f"Residual SR {combined_residual_sr} Hz differs from target {TARGET_SAMPLE_RATE} Hz. "
+                f"Residual SR {combined_residual_sr} Hz differs from target {DEFAULT_SAMPLE_RATE} Hz. "
                 f"This indicates a bug in sample rate handling!"
             )
 
         for stem_name, audio_data in combined_residual.items():
             audio_data = self._align_length(audio_data, mix_audio.shape[1])
             stem_path = output_dir / f"{audio_file.stem}_({stem_name}).wav"
-            sf.write(str(stem_path), audio_data.T, TARGET_SAMPLE_RATE, subtype="PCM_16")
+            sf.write(str(stem_path), audio_data.T, DEFAULT_SAMPLE_RATE, subtype="PCM_16")
             final_stems[stem_name] = stem_path
 
         total_time = time.time() - start_time
@@ -463,7 +464,7 @@ class EnsembleSeparator:
         Kombiniert Stems mit stem-spezifischen Gewichten
 
         WHY: Verschiedene Modelle sind für verschiedene Stems besser
-             (z.B. Mel-RoFormer für Vocals, Demucs für Drums)
+             (z.B. BS-RoFormer für Vocals, Demucs für Drums)
 
         Args:
             results: Liste von SeparationResults
@@ -582,8 +583,8 @@ class EnsembleSeparator:
                 else:
                     # Model doesn't have this specific stem - skip it
                     # WHY: Only use models that actually output pure stems for each type
-                    # - 2-stem models (mel-roformer) only contribute to vocals
-                    # - 4-stem models (bs-roformer, demucs) contribute to all stems
+                    # - 2-stem models (bs-roformer, mdx) only contribute to vocals
+                    # - 4-stem models (demucs) contribute to all stems
                     # DO NOT use "instrumental" for drums/bass/other because it's a MIX
                     # of all instruments, not a pure stem!
                     self.logger.info(
@@ -596,7 +597,7 @@ class EnsembleSeparator:
                 continue
 
             # Re-normalisiere Gewichte basierend auf tatsächlich verfügbaren Stems
-            # Dies behebt das Problem, dass fehlende Stems (z.B. Mel-RoFormer ohne Drums)
+            # Dies behebt das Problem, dass fehlende Stems (z.B. BS-RoFormer ohne Drums)
             # die Gesamtlautstärke reduzieren würden
             total_available_weight = sum(available_weights)
             if total_available_weight > 0:
@@ -618,17 +619,17 @@ class EnsembleSeparator:
                 for i, (audio, _, model_id, sr) in enumerate(stem_audios)
             ]
 
-            # CRITICAL: Always use TARGET_SAMPLE_RATE (44100 Hz)
+            # CRITICAL: Always use DEFAULT_SAMPLE_RATE (44100 Hz)
             # WHY: Prevents cumulative resampling errors and timing drift
             #      Using first model's sample rate was causing progressive desync
-            target_sr = TARGET_SAMPLE_RATE
+            target_sr = DEFAULT_SAMPLE_RATE
             target_sample_rate = target_sr
             needs_resample = any(sr != target_sr for sr in sample_rates)
 
             # Validate mix_sample_rate if provided
-            if mix_sample_rate and mix_sample_rate != TARGET_SAMPLE_RATE:
+            if mix_sample_rate and mix_sample_rate != DEFAULT_SAMPLE_RATE:
                 self.logger.warning(
-                    f"mix_sample_rate {mix_sample_rate} Hz differs from TARGET_SAMPLE_RATE {TARGET_SAMPLE_RATE} Hz. "
+                    f"mix_sample_rate {mix_sample_rate} Hz differs from DEFAULT_SAMPLE_RATE {DEFAULT_SAMPLE_RATE} Hz. "
                     f"This should have been resampled earlier!"
                 )
 
