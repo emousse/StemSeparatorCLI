@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple
+import platform
 import numpy as np
 import soundfile as sf
 
@@ -26,10 +27,12 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QScrollArea,
     QProgressBar,
+    QProgressDialog,
     QFrame,
     QStackedWidget,
     QSpinBox,
     QCheckBox,
+    QApplication,
 )
 from PySide6.QtCore import Qt, Signal, Slot, QTimer, QRunnable, QThreadPool, QObject
 
@@ -106,6 +109,60 @@ class BeatAnalysisWorker(QRunnable):
         except Exception as e:
             if not self._cancelled:
                 self.logger.error(f"Beat analysis error: {e}", exc_info=True)
+                self.signals.error.emit(str(e))
+
+
+class LoadStemsWorker(QRunnable):
+    """
+    Background worker for loading stem audio files.
+
+    PURPOSE: Load audio files and perform resampling without blocking GUI thread
+    CONTEXT: Audio loading with soundfile and librosa resampling can be slow for large files
+    """
+
+    class Signals(QObject):
+        finished = Signal(bool)  # success
+        error = Signal(str)  # error_message
+        progress = Signal(int, str)  # percent, message
+
+    def __init__(self, player, stem_files: Dict[str, Path], logger):
+        super().__init__()
+        self.player = player
+        self.stem_files = stem_files
+        self.logger = logger
+        self.signals = self.Signals()
+        self._cancelled = False
+
+    def cancel(self):
+        """Request cancellation of the loading."""
+        self._cancelled = True
+
+    def run(self):
+        """Execute stem loading in background."""
+        try:
+            total_files = len(self.stem_files)
+            if total_files == 0:
+                self.signals.error.emit("No stem files to load")
+                return
+
+            self.signals.progress.emit(0, f"Loading {total_files} stems...")
+
+            # Load stems using player's load_stems method
+            # This performs I/O and potentially resampling, which can be slow
+            success = self.player.load_stems(self.stem_files)
+
+            if self._cancelled:
+                return
+
+            if success:
+                self.signals.progress.emit(100, "Loading complete")
+                self.signals.finished.emit(True)
+            else:
+                self.signals.error.emit("Failed to load stems. Check logs for details.")
+
+        except Exception as e:
+            if not self._cancelled:
+                self.logger.error(f"Stem loading error: {e}", exc_info=True)
                 self.signals.error.emit(str(e))
 
 
@@ -294,6 +351,8 @@ class PlayerWidget(QWidget):
 
         # Beat analysis worker (for async detection)
         self._beat_analysis_worker: Optional[BeatAnalysisWorker] = None
+        # Stem loading worker (for async loading)
+        self._load_stems_worker: Optional[LoadStemsWorker] = None
         self._thread_pool = QThreadPool()
 
         # Time-stretching state
@@ -2656,6 +2715,8 @@ class PlayerWidget(QWidget):
     @Slot()
     def _on_load_dir(self):
         """Load all stems from directory"""
+        # Use static method for better compatibility with packaged apps
+        # WHY: getExistingDirectory() is more reliable in packaged macOS apps
         directory = QFileDialog.getExistingDirectory(
             self, "Select Directory with Stems"
         )
@@ -2682,13 +2743,17 @@ class PlayerWidget(QWidget):
     @Slot()
     def _on_load_files(self):
         """Load individual stem files"""
-        file_dialog = QFileDialog(self)
-        file_dialog.setFileMode(QFileDialog.ExistingFiles)
-        file_dialog.setNameFilter("Audio Files (*.wav *.mp3 *.flac *.m4a *.ogg *.aac)")
+        # Use static method for better compatibility with packaged apps
+        # WHY: getOpenFileNames() is more reliable than exec() in packaged macOS apps
+        file_paths, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Select Stem Files",
+            "",
+            "Audio Files (*.wav *.mp3 *.flac *.m4a *.ogg *.aac);;All Files (*)"
+        )
 
-        if file_dialog.exec():
-            file_paths = [Path(f) for f in file_dialog.selectedFiles()]
-            self._load_stems(file_paths)
+        if file_paths:
+            self._load_stems([Path(f) for f in file_paths])
 
     @Slot(list)
     def _on_files_dropped(self, file_paths: List[Path]):
@@ -2808,7 +2873,12 @@ class PlayerWidget(QWidget):
         self._update_button_states()
 
     def _load_stems(self, file_paths: list[Path]):
-        """Load stem files into player"""
+        """
+        Load stem files into player using background worker.
+        
+        PURPOSE: Parse file paths and load audio in background to prevent UI freezing
+        CONTEXT: Audio loading with I/O and resampling can block GUI thread in packaged apps
+        """
         # Reset all loop detection state before loading new stems
         self._reset_loop_detection_state()
 
@@ -2822,7 +2892,7 @@ class PlayerWidget(QWidget):
         # Clear stems list
         self.stems_list.clear()
 
-        # Parse stem files
+        # Parse stem files (fast operation, can stay on main thread)
         for file_path in file_paths:
             # Try to extract stem name from filename
             # Expected formats:
@@ -2895,9 +2965,50 @@ class PlayerWidget(QWidget):
             self.stem_controls[stem_name] = control
             self.stems_container.addWidget(control)
 
-        # Load into player
+        # Load into player using background worker to prevent UI freezing
         if self.stem_files:
-            success = self.player.load_stems(self.stem_files)
+            self._load_stems_async(self.stem_files)
+        else:
+            # Update button states even if no files
+            self._update_button_states()
+
+    def _load_stems_async(self, stem_files: Dict[str, Path]):
+        """
+        Load stems asynchronously using background worker.
+        
+        PURPOSE: Prevent UI freezing during audio file I/O and resampling
+        CONTEXT: Especially important in packaged apps where I/O can be slower
+        """
+        # Cancel any existing loading worker
+        if self._load_stems_worker:
+            self._load_stems_worker.cancel()
+            self._load_stems_worker = None
+
+        # Create progress dialog
+        progress = QProgressDialog(
+            f"Loading {len(stem_files)} stems...", None, 0, 100, self
+        )
+        progress.setWindowTitle("Loading Stems")
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setCancelButton(None)  # Don't allow cancel (would leave inconsistent state)
+        progress.setMinimumDuration(0)  # Show immediately
+        progress.setValue(0)
+        progress.show()
+
+        # Create worker
+        self._load_stems_worker = LoadStemsWorker(
+            self.player, stem_files, self.ctx.logger()
+        )
+
+        # Connect signals
+        def on_progress(percent: int, message: str):
+            progress.setLabelText(f"{message}\n{percent}%")
+            progress.setValue(max(0, min(100, percent)))
+            QApplication.processEvents()  # Keep UI responsive
+
+        def on_finished(success: bool):
+            progress.close()
+            self._load_stems_worker = None
 
             if success:
                 # Enable controls (but Play button will check sounddevice availability)
@@ -2913,12 +3024,12 @@ class PlayerWidget(QWidget):
                 self.position_slider.setRange(0, int(duration * 1000))  # milliseconds
 
                 self.info_label.setText(
-                    f"✓ Loaded {len(self.stem_files)} stems. "
+                    f"✓ Loaded {len(stem_files)} stems. "
                     f"Duration: {self._format_time(duration)}"
                 )
 
                 self.ctx.logger().info(
-                    f"Loaded {len(self.stem_files)} stems for playback"
+                    f"Loaded {len(stem_files)} stems for playback"
                 )
 
                 # Check if playback is available and warn user if not
@@ -2933,19 +3044,53 @@ class PlayerWidget(QWidget):
                     )
                     # Update info label to reflect this
                     self.info_label.setText(
-                        f"✓ Loaded {len(self.stem_files)} stems. "
+                        f"✓ Loaded {len(stem_files)} stems. "
                         f"Duration: {self._format_time(duration)}\n"
                         "⚠ Playback unavailable (sounddevice not installed)"
                     )
             else:
+                # Reset UI state on failure
+                self.stem_files.clear()
+                self.stems_list.clear()
+                for control in self.stem_controls.values():
+                    control.deleteLater()
+                self.stem_controls.clear()
+
                 QMessageBox.critical(
                     self,
                     "Loading Failed",
                     "Failed to load stems. Check the log for details.",
                 )
 
-        # Update button states based on loaded stems
-        self._update_button_states()
+            # Update button states based on loaded stems
+            self._update_button_states()
+
+        def on_error(error_message: str):
+            progress.close()
+            self._load_stems_worker = None
+
+            # Reset UI state on error
+            self.stem_files.clear()
+            self.stems_list.clear()
+            for control in self.stem_controls.values():
+                control.deleteLater()
+            self.stem_controls.clear()
+
+            QMessageBox.critical(
+                self,
+                "Loading Error",
+                f"Failed to load stems:\n\n{error_message}",
+            )
+
+            # Update button states
+            self._update_button_states()
+
+        self._load_stems_worker.signals.progress.connect(on_progress)
+        self._load_stems_worker.signals.finished.connect(on_finished)
+        self._load_stems_worker.signals.error.connect(on_error)
+
+        # Start worker
+        self._thread_pool.start(self._load_stems_worker)
 
     def _get_common_filename(self) -> str:
         """

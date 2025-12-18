@@ -75,9 +75,7 @@ user_settings.json
 
 # PyInstaller / Packaging
 # Note: .spec files ARE tracked (they're build configuration)
-dist/StemSeparator.app/
-dist/StemSeparator/
-dist/*.dmg
+dist/
 build/
 *.app
 packaging/icon.icns
