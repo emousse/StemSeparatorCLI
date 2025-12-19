@@ -1,28 +1,28 @@
 # Core GUI Framework
-PySide6>=6.6.0
+PySide6==6.10.0
 
 # Audio Separation
-audio-separator>=0.20.0
+audio-separator==0.39.1
 
 # System Audio Recording
-soundcard>=0.4.2
+soundcard==0.4.5
 
 # Audio Playback
-sounddevice>=0.4.6  # Audio playback (migrated from rtmixer)
+sounddevice==0.5.3  # Audio playback (migrated from rtmixer)
 
 # Audio Processing
-numpy>=1.24.0
-soundfile>=0.12.1
-librosa>=0.10.0
-pydub>=0.25.1
-resampy>=0.4.2
-scipy>=1.11.0  # For signal resampling in ensemble mode
-pyrubberband>=0.3.0  # Pitch-preserving time-stretching for loop export
+numpy==2.3.4
+soundfile==0.13.1
+librosa==0.11.0
+pydub==0.25.1
+resampy==0.4.3
+scipy==1.16.3  # For signal resampling in ensemble mode
+pyrubberband==0.4.0  # Pitch-preserving time-stretching for loop export
 
 # Enhanced BPM Detection (Optional - provides 95%+ accuracy vs librosa's ~75-85%)
 # Automatically uses CUDA/MPS if available, falls back to CPU
 # If not installed, system falls back to librosa for BPM detection
-deeprhythm>=0.0.13  # Optional: Enhanced BPM detection with confidence scores
+deeprhythm==0.0.13  # Optional: Enhanced BPM detection with confidence scores
 
 # Beat Detection for Loop Preview
 # NOTE: BeatNet runs as isolated subprocess binary (packaging/beatnet_service/)
@@ -30,23 +30,23 @@ deeprhythm>=0.0.13  # Optional: Enhanced BPM detection with confidence scores
 # The main app communicates via beat_service_client.py → beatnet-service binary
 
 # ML Models
-torch>=2.0.0
-torchaudio>=2.0.0
-onnxruntime>=1.16.0
+torch==2.9.0
+torchaudio==2.9.0
+onnxruntime==1.23.2
 
 # Utilities
-requests>=2.31.0
-tqdm>=4.66.0
-colorlog>=6.8.0
-PyYAML>=6.0.0
-psutil>=5.9.0
+requests==2.32.5
+tqdm==4.67.1
+colorlog==6.10.1
+PyYAML==6.0.3
+psutil==7.1.3
 
 # Testing
-pytest>=7.4.0
-pytest-qt>=4.2.0
-pytest-cov>=4.1.0
-pytest-mock>=3.12.0
+pytest==9.0.0
+pytest-qt==4.5.0
+pytest-cov==7.0.0
+pytest-mock==3.15.1
 
 # Development
-black>=23.0.0
-flake8>=6.0.0
+black==25.9.0
+flake8==7.3.0
