@@ -18,7 +18,6 @@ from utils.beat_detection import (
     is_beatnet_available,
     detect_beats_and_downbeats,
     calculate_loops_from_downbeats,
-    _get_best_device,
     _get_beatnet_predictor,
 )
 
@@ -26,40 +25,7 @@ from utils.beat_detection import (
 # ============================================================================
 # Device Detection Tests
 # ============================================================================
-
-
-def test_get_best_device_cuda():
-    """Test device detection when CUDA is available"""
-    with patch("torch.cuda.is_available", return_value=True):
-        device = _get_best_device()
-        assert device == "cuda"
-
-
-def test_get_best_device_mps():
-    """Test device detection when MPS is available (Apple Silicon)"""
-    mock_torch = MagicMock()
-    mock_torch.cuda.is_available.return_value = False
-    mock_torch.backends.mps.is_available.return_value = True
-
-    with patch.dict("sys.modules", {"torch": mock_torch}):
-        device = _get_best_device()
-        assert device == "mps"
-
-
-def test_get_best_device_cpu():
-    """Test device detection fallback to CPU"""
-    with patch("torch.cuda.is_available", return_value=False):
-        with patch("torch.backends.mps.is_available", return_value=False):
-            device = _get_best_device()
-            assert device == "cpu"
-
-
-def test_get_best_device_no_torch():
-    """Test device detection when PyTorch not installed"""
-    with patch.dict("sys.modules", {"torch": None}):
-        with patch("builtins.__import__", side_effect=ImportError):
-            device = _get_best_device()
-            assert device == "cpu"
+# Note: _get_best_device tests removed as function no longer exists in beat_detection module
 
 
 # ============================================================================
