@@ -17,6 +17,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cloud-based processing (optional)
 - Mobile app (iOS/Android)
 
+## [1.0.1] - 2025-12-18
+
+### Added
+- **Comprehensive Documentation**
+  - User Guide (English) - 800+ lines comprehensive guide
+  - Benutzeranleitung (Deutsch) - 700+ lines German user guide
+  - MODEL_LICENSES.md - Complete AI model licensing documentation
+  - THIRD_PARTY_LICENSES.md - Full third-party dependency licenses
+  - License compatibility tables and verification instructions
+- **GitHub Community Files**
+  - Issue templates for bug reports and feature requests
+  - Pull request template
+  - Security policy (SECURITY.md)
+  - Code of Conduct
+
+### Changed
+- **Dependencies Pinned to Exact Versions**
+  - requirements.txt updated with exact tested versions
+  - PySide6: 6.10.0, PyTorch: 2.9.0, numpy: 2.3.4
+  - Ensures reproducible builds and consistent behavior
+- **Repository Cleanup**
+  - Removed internal development files
+  - Cleaned up temporary and build artifacts
+  - Updated .gitignore for better exclusions
+  - Removed debug print statements from production code
+
+### Fixed
+- **Test Suite Improvements**
+  - Fixed test collection errors (2 → 1 remaining)
+  - Renamed obsolete test files to prevent import errors
+  - test_deeprhythm_integration.py → manual_deeprhythm_integration.py
+  - test_beat_detection.py → obsolete_test_beat_detection.py
+  - Removed tests for non-existent functions (_get_best_device, _get_beatnet_predictor)
+- **Code Quality**
+  - Removed 4 debug print statements from core/separation_subprocess.py
+  - Fixed hardcoded paths in test files
+  - Cleaned configuration placeholders
+
+### Documentation
+- Updated README.md and README.de.md with new documentation links
+- Removed references to deleted internal documentation
+- Added comprehensive attribution requirements for models
+- Documented LGPL compliance for PySide6
+- Added academic citations for all AI models
+
+### Security
+- Documented all third-party licenses for legal compliance
+- Added license verification instructions
+- Clarified commercial use permissions
+
 ## [1.0.0] - 2024-12-07
 
 ### Added
