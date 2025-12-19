@@ -399,16 +399,18 @@ class ExportLoopsWidget(QWidget):
         Check if stretched loops are ready for export.
         
         PURPOSE: Determine if stretched loops have been processed and are available
-        CONTEXT: Loop version checkbox should only be enabled when loops are ready
+        CONTEXT: Loop version checkbox should only be enabled when ALL loops are ready
+                 (must match _all_loops_ready() logic for consistency)
+        
+        WHY: Uses _all_loops_ready() to ensure checkbox state matches export logic.
+             This prevents checkbox from being enabled when export would fail.
         
         Returns:
-            True if stretched loops are ready, False otherwise
+            True if ALL stretched loops are ready, False otherwise
         """
-        manager = self._get_stretch_manager()
-        if not manager:
-            return False
-        # Check if processing is complete and we have completed tasks
-        return not manager.is_running and len(manager.completed_tasks) > 0
+        # Use the same logic as _all_loops_ready() for consistency
+        # WHY: Checkbox should only be enabled when export will actually work
+        return self._all_loops_ready()
 
     def _update_loop_version_checkbox_state(self):
         """
@@ -605,11 +607,26 @@ class ExportLoopsWidget(QWidget):
         
         PURPOSE: Export loops based on settings, including loop version (original/stretched)
         CONTEXT: Uses loop_version from settings to determine export method
+        
+        WHY: When loop_version is "stretched", must ensure all loops are ready.
+             If not ready, export aborts with warning (user should see warnings
+             in Looping tab during stretching process).
         """
         try:
             # Check if we should export stretched loops
-            if settings.loop_version == "stretched" and self._all_loops_ready():
-                # Export stretched loops from cache
+            if settings.loop_version == "stretched":
+                if not self._all_loops_ready():
+                    # Not all loops are ready - abort export
+                    QMessageBox.warning(
+                        self,
+                        "Export Aborted",
+                        "Not all time-stretched loops are ready for export.\n\n"
+                        "Please ensure time-stretching processing is complete in the Looping tab. "
+                        "Check for any warnings during the stretching process."
+                    )
+                    return
+                
+                # All loops ready - export stretched loops from cache
                 self._export_stretched_loops(output_path, settings)
                 return
 
@@ -906,8 +923,11 @@ class ExportLoopsWidget(QWidget):
         
         target_bpm = self._get_target_bpm_from_player_widget()
         for stem_name in stem_files.keys():
+            # WHY: BackgroundStretchManager stores loops with lowercase stem names
+            #      for consistency. Must use lowercase when checking readiness.
+            stem_name_lower = stem_name.lower()
             for loop_idx in range(len(loop_segments)):
-                if not manager.is_loop_ready(stem_name, loop_idx, target_bpm):
+                if not manager.is_loop_ready(stem_name_lower, loop_idx, target_bpm):
                     return False
 
         return True
@@ -968,8 +988,11 @@ class ExportLoopsWidget(QWidget):
                     mixed_audio = None
                     for stem_name in stem_files.keys():
                         # Get stretched loop from cache
+                        # WHY: BackgroundStretchManager stores loops with lowercase stem names
+                        #      for consistency. Must use lowercase when retrieving.
+                        stem_name_lower = stem_name.lower()
                         loop_audio = manager.get_stretched_loop(
-                            stem_name, loop_idx, target_bpm
+                            stem_name_lower, loop_idx, target_bpm
                         )
 
                         if loop_audio is None:
@@ -1031,8 +1054,11 @@ class ExportLoopsWidget(QWidget):
                         file_idx += 1
 
                         # Get stretched loop from cache
+                        # WHY: BackgroundStretchManager stores loops with lowercase stem names
+                        #      for consistency. Must use lowercase when retrieving.
+                        stem_name_lower = stem_name.lower()
                         loop_audio = manager.get_stretched_loop(
-                            stem_name, loop_idx, target_bpm
+                            stem_name_lower, loop_idx, target_bpm
                         )
 
                         if loop_audio is None:
@@ -1098,8 +1124,46 @@ class ExportLoopsWidget(QWidget):
     # ========================================================================
 
     def _get_loop_segments(self):
-        """Get loop segments from player widget or BPM detection"""
-        # Try to get actual loop segments from player widget (Loop Preview)
+        """
+        Get loop segments from player widget or BPM detection.
+        
+        PURPOSE: Return loop segments that match those used for time-stretching
+        CONTEXT: When time-stretching is active, must use the same valid_loops
+                 (filtered to exclude intro loops with negative start times) that
+                 were used during stretching, otherwise _all_loops_ready() will fail.
+        
+        WHY: Time-stretching filters out loops with negative start times (intro loops
+             with padding). Export must use the same filtered loops to match cache indices.
+        """
+        # PRIORITY 1: If time-stretching was performed, use the same valid_loops
+        # that were used during stretching (filtered to exclude intro loops with negative start times)
+        if self.player_widget and hasattr(self.player_widget, '_get_all_loop_segments'):
+            all_loops = self.player_widget._get_all_loop_segments()
+            
+            if all_loops:
+                # Apply the same filtering logic as in _on_start_stretch_processing_clicked()
+                # WHY: Time-stretching only processes loops with non-negative start times.
+                #      Export must use the same filtered loops to match cache indices.
+                valid_loops = []
+                for start, end in all_loops:
+                    if start >= 0.0 and end > start:
+                        valid_loops.append((start, end))
+                
+                if valid_loops:
+                    self.ctx.logger().debug(
+                        f"Using {len(valid_loops)} valid loops (filtered from {len(all_loops)} total loops) "
+                        f"to match time-stretching cache indices"
+                    )
+                    return valid_loops
+                elif all_loops:
+                    # All loops have negative start times (unlikely, but handle gracefully)
+                    self.ctx.logger().warning(
+                        f"All {len(all_loops)} loops have negative start times. "
+                        f"Cannot export stretched loops."
+                    )
+                    return []
+        
+        # PRIORITY 2: Try to get actual loop segments from player widget (Loop Preview)
         if self.player_widget and hasattr(self.player_widget, 'detected_downbeat_times'):
             downbeats = self.player_widget.detected_downbeat_times
             bars_per_loop = getattr(self.player_widget, '_bars_per_loop', 4)
@@ -1113,7 +1177,9 @@ class ExportLoopsWidget(QWidget):
                 for i in range(0, len(downbeats) - num_downbeats_per_loop, num_downbeats_per_loop):
                     start = downbeats[i]
                     end = downbeats[i + num_downbeats_per_loop]
-                    segments.append((start, end))
+                    # Only include loops with non-negative start times
+                    if start >= 0.0:
+                        segments.append((start, end))
 
                 if segments:
                     self.ctx.logger().debug(
@@ -1122,7 +1188,7 @@ class ExportLoopsWidget(QWidget):
                     )
                     return segments
 
-        # Fallback: Create dummy loops based on BPM, but limit to audio duration
+        # FALLBACK: Create dummy loops based on BPM, but limit to audio duration
         bars = self._get_bars_from_player_widget()
         bpm = self._get_bpm_from_player_widget()
 
@@ -1145,7 +1211,9 @@ class ExportLoopsWidget(QWidget):
         for i in range(num_loops):
             start = i * loop_duration
             end = min((i + 1) * loop_duration, audio_duration)
-            segments.append((start, end))
+            # Only include loops with non-negative start times (always true for dummy loops)
+            if start >= 0.0:
+                segments.append((start, end))
 
         self.ctx.logger().debug(
             f"Created {len(segments)} dummy loops (duration={audio_duration:.2f}s, "

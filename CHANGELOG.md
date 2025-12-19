@@ -17,6 +17,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cloud-based processing (optional)
 - Mobile app (iOS/Android)
 
+## [1.0.2] - 2025-12-19
+
+### Fixed
+- **Export Loops Widget - Time-Stretched Loops Export**
+  - Fixed "Use Time-Stretched Loops" checkbox not working correctly
+  - Export now correctly uses time-stretched loops when checkbox is enabled
+  - Fixed loop segment inconsistency between Looping tab and Export Loops tab
+  - Export now uses the same `valid_loops` (filtered to exclude intro loops with negative start times) that were used during time-stretching
+  - Added stem name normalization (lowercase) for consistent cache access
+  - Checkbox now only enables when all loops are ready (not just some)
+  - Export aborts with warning if time-stretching is incomplete (no silent fallback to original loops)
+  - Works correctly for both export modes (Mixed Audio and Individual Stems)
+  - Properly handles intro loops (leading loops with padding are correctly filtered out)
+
 ## [1.0.1] - 2025-12-18
 
 ### Added
@@ -201,7 +215,9 @@ Not applicable for first release.
 - `Fixed` - Bug fixes
 - `Security` - Security improvements
 
-[Unreleased]: https://github.com/MaurizioFratello/StemSeparator/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/MaurizioFratello/StemSeparator/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/MaurizioFratello/StemSeparator/compare/v1.0.1...v1.0.2
+[1.0.1]: https://github.com/MaurizioFratello/StemSeparator/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/MaurizioFratello/StemSeparator/releases/tag/v1.0.0
 [1.0.0-rc1]: https://github.com/MaurizioFratello/StemSeparator/releases/tag/v1.0.0-rc1
 [0.9.0]: https://github.com/MaurizioFratello/StemSeparator/releases/tag/v0.9.0
