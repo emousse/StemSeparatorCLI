@@ -146,13 +146,8 @@ def run_separation_subprocess(
 
     # Parse output files
     stems = {}
-    print(
-        f"DEBUG: audio-separator returned {len(output_files) if output_files else 0} output files",
-        file=sys.stderr,
-    )
     if isinstance(output_files, list):
         for file_path in output_files:
-            print(f"DEBUG: Processing output file: {file_path}", file=sys.stderr)
             file_path = Path(file_path)
 
             # Make absolute if needed
@@ -198,12 +193,7 @@ def run_separation_subprocess(
             stems[stem_name] = str(
                 file_path
             )  # Convert to string for JSON serialization
-            print(
-                f"DEBUG: Extracted stem '{stem_name}' from {file_path.name}",
-                file=sys.stderr,
-            )
 
-    print(f"DEBUG: Final stems dict: {list(stems.keys())}", file=sys.stderr)
     return stems
 
 
