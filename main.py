@@ -295,9 +295,13 @@ def main():
 
         # Start BeatNet warm-up in background (after QApplication is ready, before window shown)
         # WHY: Pre-approve binary with XProtect silently in background, user won't notice
-        from utils.beatnet_warmup import warmup_beatnet_async
+        from utils.beatnet_warmup import warmup_beatnet_async, cancel_warmup
 
         warmup_beatnet_async()
+
+        # Register cleanup handler for app shutdown (defense in depth)
+        # WHY: Ensures warmup is cancelled even if closeEvent is bypassed
+        app.aboutToQuit.connect(lambda: cancel_warmup())
 
         # Create main window
         update_status("Loading main window...")

@@ -15,7 +15,7 @@ import signal
 import subprocess
 from pathlib import Path
 from dataclasses import dataclass
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Callable
 
 from utils.logger import get_logger
 
@@ -161,6 +161,7 @@ def analyze_beats(
     max_duration: Optional[float] = None,
     device: BeatBackend = "auto",
     timeout_seconds: float = 60.0,
+    process_callback: Optional[Callable[[subprocess.Popen], None]] = None,
 ) -> BeatAnalysisResult:
     """
     Run beat analysis via BeatNet service subprocess.
@@ -170,6 +171,8 @@ def analyze_beats(
         max_duration: Optional limit on analysis duration (seconds)
         device: Compute device ('cpu', 'mps', 'cuda', 'auto')
         timeout_seconds: Maximum time to wait for analysis
+        process_callback: Optional callback function called with subprocess
+                         after it's created. Useful for tracking/cancellation.
 
     Returns:
         BeatAnalysisResult with tempo, beats, downbeats
@@ -224,6 +227,14 @@ def analyze_beats(
             stderr=subprocess.PIPE,
             text=True,
         )
+
+        # Call callback with subprocess reference if provided
+        # WHY: Allows caller to track/terminate subprocess for cancellation
+        if process_callback:
+            try:
+                process_callback(process)
+            except Exception as e:
+                logger.warning(f"Error in process_callback: {e}")
 
         # Wait for completion with timeout
         stdout, stderr = process.communicate(timeout=timeout_seconds)

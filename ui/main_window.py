@@ -599,6 +599,20 @@ class MainWindow(QMainWindow):
         self._logger.debug(f"Export widgets refreshed (stems_loaded={stems_loaded})")
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
-        """Intercept close event for graceful shutdown."""
+        """
+        Intercept close event for graceful shutdown.
+        
+        PURPOSE: Cancel background tasks (e.g., BeatNet warmup) to prevent freeze
+        CONTEXT: Warmup subprocess can block shutdown when XProtect is scanning
+        """
         self._logger.info("Application shutdown requested")
+        
+        # Cancel BeatNet warmup if running
+        # WHY: Prevents 1-2 minute freeze when user quits during XProtect scanning
+        try:
+            from utils.beatnet_warmup import cancel_warmup
+            cancel_warmup()
+        except Exception as e:
+            self._logger.warning(f"Error cancelling warmup: {e}")
+        
         event.accept()

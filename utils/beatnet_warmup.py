@@ -17,10 +17,11 @@ import threading
 import time
 import numpy as np
 import soundfile as sf
+import subprocess
 from typing import Optional
 
 from utils.logger import get_logger
-from utils.beat_service_client import analyze_beats, is_beat_service_available
+from utils.beat_service_client import analyze_beats, is_beat_service_available, _terminate_process
 
 logger = get_logger()
 
@@ -28,6 +29,11 @@ logger = get_logger()
 _warmup_lock = threading.Lock()
 _warmup_complete = False
 _warmup_in_progress = False
+
+# Global subprocess tracking for cancellation
+_warmup_process: Optional[subprocess.Popen] = None
+_warmup_process_lock = threading.Lock()
+_warmup_cancelled = threading.Event()
 
 
 def generate_dummy_audio(
@@ -76,7 +82,10 @@ def warmup_beatnet_service(timeout: float = 240.0) -> bool:
          Longer timeout handles resource contention when other processes
          (e.g., separation) are using MPS/GPU simultaneously.
     """
-    global _warmup_complete, _warmup_in_progress
+    global _warmup_complete, _warmup_in_progress, _warmup_process
+
+    # Reset cancellation flag for new warmup attempt
+    _warmup_cancelled.clear()
 
     with _warmup_lock:
         # Skip if already complete
@@ -92,6 +101,14 @@ def warmup_beatnet_service(timeout: float = 240.0) -> bool:
         _warmup_in_progress = True
 
     try:
+        # Check cancellation before starting
+        if _warmup_cancelled.is_set():
+            logger.debug("BeatNet warm-up cancelled before starting")
+            with _warmup_lock:
+                _warmup_complete = True
+                _warmup_in_progress = False
+            return False
+
         # Check if BeatNet service is available
         if not is_beat_service_available():
             logger.info("BeatNet service not available, skipping warm-up")
@@ -113,8 +130,32 @@ def warmup_beatnet_service(timeout: float = 240.0) -> bool:
             sf.write(str(tmp_path), audio_data, sample_rate)
 
             try:
+                # Callback to track subprocess for cancellation
+                def track_process(process: subprocess.Popen) -> None:
+                    global _warmup_process
+                    with _warmup_process_lock:
+                        _warmup_process = process
+
                 # Run BeatNet analysis (this will trigger XProtect on first run)
-                result = analyze_beats(tmp_path, timeout_seconds=timeout, device="auto")
+                # Pass callback to track subprocess for cancellation
+                result = analyze_beats(
+                    tmp_path,
+                    timeout_seconds=timeout,
+                    device="auto",
+                    process_callback=track_process,
+                )
+
+                # Clear subprocess reference after completion
+                with _warmup_process_lock:
+                    _warmup_process = None
+
+                # Check if cancelled (subprocess may have been terminated)
+                if _warmup_cancelled.is_set():
+                    logger.debug("BeatNet warm-up was cancelled")
+                    with _warmup_lock:
+                        _warmup_complete = True
+                        _warmup_in_progress = False
+                    return False
 
                 # Success! BeatNet is now "approved" by XProtect
                 logger.info(
@@ -128,15 +169,37 @@ def warmup_beatnet_service(timeout: float = 240.0) -> bool:
 
                 return True
 
+            except Exception as e:
+                # Clear subprocess reference on error
+                with _warmup_process_lock:
+                    _warmup_process = None
+
+                # Check if error was due to cancellation
+                if _warmup_cancelled.is_set():
+                    logger.debug("BeatNet warm-up cancelled during execution")
+                    with _warmup_lock:
+                        _warmup_complete = True
+                        _warmup_in_progress = False
+                    return False
+
+                # Warm-up failed, but this is non-critical
+                # First real analysis will still work, just slower
+                logger.warning(f"BeatNet warm-up failed (non-critical): {e}")
+                with _warmup_lock:
+                    _warmup_complete = True  # Mark as complete to avoid retries
+                    _warmup_in_progress = False
+                return False
+
             finally:
                 # Clean up temporary file
                 if tmp_path.exists():
                     tmp_path.unlink()
+                # Ensure subprocess reference is cleared
+                with _warmup_process_lock:
+                    _warmup_process = None
 
         except Exception as e:
-            # Warm-up failed, but this is non-critical
-            # First real analysis will still work, just slower
-            logger.warning(f"BeatNet warm-up failed (non-critical): {e}")
+            logger.error(f"Unexpected error in warm-up: {e}", exc_info=True)
             with _warmup_lock:
                 _warmup_complete = True  # Mark as complete to avoid retries
                 _warmup_in_progress = False
@@ -148,6 +211,35 @@ def warmup_beatnet_service(timeout: float = 240.0) -> bool:
             _warmup_complete = True  # Mark as complete to avoid retries
             _warmup_in_progress = False
         return False
+
+
+def cancel_warmup() -> None:
+    """
+    Cancel ongoing BeatNet warm-up and terminate subprocess if running.
+
+    PURPOSE: Allow graceful shutdown when user quits app during warmup
+    CONTEXT: Called from closeEvent() or aboutToQuit signal to prevent freeze
+             when XProtect is scanning the beatnet-service binary
+
+    WHY: Prevents 1-2 minute freeze when user quits immediately after startup
+    """
+    global _warmup_process
+
+    # Set cancellation flag
+    _warmup_cancelled.set()
+    logger.debug("BeatNet warm-up cancellation requested")
+
+    # Terminate subprocess if running
+    with _warmup_process_lock:
+        if _warmup_process is not None:
+            try:
+                logger.info("Terminating BeatNet warm-up subprocess...")
+                _terminate_process(_warmup_process)
+                logger.debug("BeatNet warm-up subprocess terminated")
+            except Exception as e:
+                logger.warning(f"Error terminating warm-up subprocess: {e}")
+            finally:
+                _warmup_process = None
 
 
 def warmup_beatnet_async():

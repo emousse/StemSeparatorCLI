@@ -181,6 +181,62 @@ hiddenimports = [
     'audio_separator.separator.architectures.vr_separator',
     'audio_separator.separator.common_separator',
 
+    # RoFormer model configuration and loading (top-level package)
+    'audio_separator.separator.roformer',
+    'audio_separator.separator.roformer.bs_roformer_config',
+    'audio_separator.separator.roformer.bs_roformer_validator',
+    'audio_separator.separator.roformer.configuration_normalizer',
+    'audio_separator.separator.roformer.mel_band_roformer_config',
+    'audio_separator.separator.roformer.mel_band_roformer_validator',
+    'audio_separator.separator.roformer.model_configuration',
+    'audio_separator.separator.roformer.model_loading_result',
+    'audio_separator.separator.roformer.parameter_validation_error',
+    'audio_separator.separator.roformer.parameter_validator',
+    'audio_separator.separator.roformer.roformer_loader',
+
+    # Audio separator UVR library (includes embedded demucs, mdx, vr models)
+    'audio_separator.separator.uvr_lib_v5',
+    'audio_separator.separator.uvr_lib_v5.mdxnet',
+    'audio_separator.separator.uvr_lib_v5.modules',
+    'audio_separator.separator.uvr_lib_v5.playsound',
+    'audio_separator.separator.uvr_lib_v5.pyrb',
+    'audio_separator.separator.uvr_lib_v5.results',
+    'audio_separator.separator.uvr_lib_v5.spec_utils',
+    'audio_separator.separator.uvr_lib_v5.stft',
+    'audio_separator.separator.uvr_lib_v5.tfc_tdf_v3',
+
+    # Roformer architecture
+    'audio_separator.separator.uvr_lib_v5.roformer',
+    'audio_separator.separator.uvr_lib_v5.roformer.attend',
+    'audio_separator.separator.uvr_lib_v5.roformer.bs_roformer',
+    'audio_separator.separator.uvr_lib_v5.roformer.mel_band_roformer',
+
+    # VR Network architecture
+    'audio_separator.separator.uvr_lib_v5.vr_network',
+    'audio_separator.separator.uvr_lib_v5.vr_network.layers',
+    'audio_separator.separator.uvr_lib_v5.vr_network.layers_new',
+    'audio_separator.separator.uvr_lib_v5.vr_network.model_param_init',
+    'audio_separator.separator.uvr_lib_v5.vr_network.nets',
+    'audio_separator.separator.uvr_lib_v5.vr_network.nets_new',
+
+    # Demucs models (embedded in audio-separator)
+    'audio_separator.separator.uvr_lib_v5.demucs',
+    'audio_separator.separator.uvr_lib_v5.demucs.apply',
+    'audio_separator.separator.uvr_lib_v5.demucs.demucs',
+    'audio_separator.separator.uvr_lib_v5.demucs.filtering',
+    'audio_separator.separator.uvr_lib_v5.demucs.hdemucs',
+    'audio_separator.separator.uvr_lib_v5.demucs.htdemucs',  # CRITICAL: Missing module causing failure
+    'audio_separator.separator.uvr_lib_v5.demucs.model',
+    'audio_separator.separator.uvr_lib_v5.demucs.model_v2',
+    'audio_separator.separator.uvr_lib_v5.demucs.pretrained',
+    'audio_separator.separator.uvr_lib_v5.demucs.repo',
+    'audio_separator.separator.uvr_lib_v5.demucs.spec',
+    'audio_separator.separator.uvr_lib_v5.demucs.states',
+    'audio_separator.separator.uvr_lib_v5.demucs.tasnet',
+    'audio_separator.separator.uvr_lib_v5.demucs.tasnet_v2',
+    'audio_separator.separator.uvr_lib_v5.demucs.transformer',
+    'audio_separator.separator.uvr_lib_v5.demucs.utils',
+
     # Audio libraries
     'soundcard',
     'soundfile',
@@ -191,6 +247,10 @@ hiddenimports = [
     'torch',
     'torch.nn',
     'torch.nn.functional',
+    'torch.nn.parallel',
+    'torch.nn.parallel.distributed',
+    'torch.utils',
+    'torch.utils.data',
     'torch.cuda',              # Needed even for CPU-only builds (module-level refs)
     'torchaudio',
     'onnxruntime',

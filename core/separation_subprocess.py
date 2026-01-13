@@ -121,6 +121,25 @@ def run_separation_subprocess(
             if not handled:
                 setattr(separator, attr_name, attr_value)
 
+    # Add diagnostics for debugging packaged app issues
+    import os
+    import logging
+
+    # Setup subprocess logger
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        stream=sys.stderr
+    )
+    logger_sub = logging.getLogger("StemSeparator.Subprocess")
+
+    # Log subprocess environment
+    logger_sub.info(f"Subprocess working directory: {os.getcwd()}")
+    logger_sub.info(f"Output directory (absolute): {Path(output_dir).absolute()}")
+    logger_sub.info(f"Audio file (absolute): {Path(audio_file).absolute()}")
+    logger_sub.info(f"Models directory: {Path(models_dir).absolute()}")
+    logger_sub.info(f"Model ID: {model_id}, Model file: {model_filename}")
+
     try:
         # Create separator instance
         separator = AudioSeparator(
@@ -134,18 +153,64 @@ def run_separation_subprocess(
         _apply_preset_attributes(separator, preset_attributes)
 
         # Load model
+        logger_sub.info(f"Loading model: {model_filename}")
         separator.load_model(model_filename=model_filename)
 
         # Run separation
+        logger_sub.info(f"Starting separation for: {audio_file}")
         output_files = separator.separate(str(audio_file))
+
+        # Log what audio-separator returned
+        logger_sub.info(f"audio-separator returned: type={type(output_files)}, count={len(output_files) if isinstance(output_files, list) else 'N/A'}")
+        if isinstance(output_files, list) and len(output_files) > 0:
+            logger_sub.info(f"Output files: {output_files}")
+
     except Exception:
         import traceback
 
         traceback.print_exc(file=sys.stderr)
         raise
 
-    # Parse output files
+    # Validate output_files before processing
     stems = {}
+
+    if output_files is None:
+        logger_sub.error("audio-separator returned None - separation failed silently")
+        # Search for files in current working directory
+        cwd = Path.cwd()
+        cwd_files = list(cwd.glob("*"))
+        logger_sub.info(f"Files in subprocess cwd ({cwd}): {[f.name for f in cwd_files[:20]]}")
+
+        # Search for potential output files in output_dir
+        output_files_found = list(Path(output_dir).glob(f"{Path(audio_file).stem}*"))
+        logger_sub.info(f"Files in output_dir matching pattern: {[f.name for f in output_files_found]}")
+
+        raise ValueError("audio-separator returned None - no output files generated")
+
+    if not isinstance(output_files, list):
+        logger_sub.error(f"audio-separator returned unexpected type: {type(output_files)}")
+        raise TypeError(f"Expected list from audio-separator, got {type(output_files)}")
+
+    if len(output_files) == 0:
+        logger_sub.warning("audio-separator returned empty list - searching for output files")
+
+        # Search for files in multiple locations
+        search_locations = [
+            (Path.cwd(), "subprocess working directory"),
+            (Path(output_dir), "specified output directory"),
+        ]
+
+        for search_path, location_name in search_locations:
+            pattern = f"{Path(audio_file).stem}*"
+            found_files = list(search_path.glob(pattern))
+            logger_sub.info(f"Searching {location_name} ({search_path}) for '{pattern}': found {len(found_files)} files")
+            if found_files:
+                logger_sub.info(f"Found files: {[f.name for f in found_files]}")
+                # Use found files if they exist
+                output_files = [str(f) for f in found_files if f.suffix in ['.wav', '.mp3', '.flac']]
+                if output_files:
+                    logger_sub.info(f"Using discovered files as output: {output_files}")
+                    break
     if isinstance(output_files, list):
         for file_path in output_files:
             file_path = Path(file_path)
@@ -153,6 +218,23 @@ def run_separation_subprocess(
             # Make absolute if needed
             if not file_path.is_absolute():
                 file_path = output_dir / file_path
+
+            # Verify file actually exists
+            if not file_path.exists():
+                logger_sub.warning(f"Expected output file does not exist: {file_path}")
+                # Try to find it in other locations
+                filename = file_path.name
+                for search_path, _ in search_locations:
+                    potential_path = search_path / filename
+                    if potential_path.exists():
+                        logger_sub.info(f"Found file in alternate location: {potential_path}")
+                        file_path = potential_path
+                        break
+                else:
+                    logger_sub.error(f"Could not find output file anywhere: {filename}")
+                    continue  # Skip this file
+
+            logger_sub.info(f"Processing output file: {file_path}")
 
             # Extract stem name from filename
             # Format: filename_(stem).wav or filename_(stem)_modelname.wav
@@ -194,6 +276,23 @@ def run_separation_subprocess(
                 file_path
             )  # Convert to string for JSON serialization
 
+    # Final validation: ensure we got at least some stems
+    if not stems or len(stems) == 0:
+        logger_sub.error("No stems were created after processing output files")
+        logger_sub.error(f"output_files was: {output_files}")
+        logger_sub.error(f"Working directory: {os.getcwd()}")
+        logger_sub.error(f"Output directory: {output_dir}")
+
+        # One final search attempt
+        all_wav_files = list(Path(output_dir).glob("*.wav"))
+        logger_sub.error(f"All .wav files in output directory: {[f.name for f in all_wav_files]}")
+
+        raise ValueError(
+            "Separation completed but no valid stem files were found. "
+            "This may indicate a path resolution issue or audio-separator failure."
+        )
+
+    logger_sub.info(f"Successfully processed {len(stems)} stems: {list(stems.keys())}")
     return stems
 
 

@@ -281,6 +281,11 @@ class Separator:
             # Create unified filename: {audio_file.stem}_({stem_name}).wav
             new_path = output_dir / f"{audio_file.stem}_({stem_name}).wav"
 
+            # Verify source file exists before attempting rename
+            if not stem_path.exists():
+                self.logger.error(f"Cannot rename: source file does not exist: {stem_path}")
+                raise SeparationError(f"Expected stem file not found: {stem_path}")
+
             # Only rename if different
             if stem_path != new_path:
                 if new_path.exists():
@@ -542,6 +547,13 @@ class Separator:
                 # Set LSUIElement to hide from Dock (background app)
                 env["LSUIElement"] = "1"
 
+            # CRITICAL FIX for packaged app: Set working directory to output_dir
+            # WHY: In packaged apps, subprocess runs from inside bundle (sys._MEIPASS)
+            #      causing audio-separator to write files to wrong location
+            # FIX: Set cwd to output directory so all paths resolve correctly
+            subprocess_kwargs["cwd"] = str(output_dir)
+            self.logger.info(f"Subprocess working directory set to: {output_dir}")
+
             process = subprocess.Popen(cmd, **subprocess_kwargs)
 
             # Send parameters via stdin
@@ -564,6 +576,10 @@ class Separator:
             stop_progress.set()
             if progress_thread:
                 progress_thread.join(timeout=1.0)
+
+            # Log stderr output for diagnostics (even on success, may contain warnings)
+            if stderr and stderr.strip():
+                self.logger.info(f"Subprocess stderr output:\n{stderr}")
 
             # Check return code
             if process.returncode != 0:
@@ -623,6 +639,18 @@ class Separator:
 
             # Convert string paths back to Path objects
             stems = {name: Path(path) for name, path in result["stems"].items()}
+
+            # Validate that we got at least some stems
+            if not stems or len(stems) == 0:
+                error_msg = (
+                    f"Separation subprocess completed but returned no stems. "
+                    f"This may indicate a path resolution issue in the packaged app. "
+                    f"Output directory: {output_dir}\n"
+                    f"Subprocess stdout: {stdout}\n"
+                    f"Subprocess stderr: {stderr}"
+                )
+                self.logger.error(error_msg)
+                raise SeparationError(error_msg)
 
             self.logger.info(
                 f"Subprocess separation complete: {len(stems)} stems created"
