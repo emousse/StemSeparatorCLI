@@ -19,9 +19,12 @@ from config import (
     DEFAULT_SAMPLE_RATE,
     MODELS,
     TEMP_DIR,
+    get_default_output_dir,
+    DEFAULT_SEPARATED_DIR,
 )
 from core.separator import Separator, SeparationResult
 from utils.logger import get_logger
+from utils.path_utils import resolve_output_path
 
 logger = get_logger()
 
@@ -216,8 +219,14 @@ class EnsembleSeparator:
         if progress_callback:
             progress_callback("Saving ensemble results...", 95)
 
-        output_dir = output_dir or self.separator.output_dir
-        output_dir.mkdir(parents=True, exist_ok=True)
+        # Resolve to absolute path and use default if None
+        if output_dir is None:
+            output_dir = get_default_output_dir("separated")
+        else:
+            # Resolve to absolute path and ensure directory exists
+            output_dir = resolve_output_path(output_dir, DEFAULT_SEPARATED_DIR)
+        
+        self.logger.info(f"Ensemble output directory: {output_dir}")
 
         final_stems = {}
         for stem_name, audio_data in combined_stems.items():

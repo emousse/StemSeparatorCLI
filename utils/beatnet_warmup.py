@@ -55,7 +55,7 @@ def generate_dummy_audio(
     return audio.astype(np.float32), sample_rate
 
 
-def warmup_beatnet_service(timeout: float = 90.0) -> bool:
+def warmup_beatnet_service(timeout: float = 240.0) -> bool:
     """
     Warm up BeatNet service by running a quick dummy analysis.
 
@@ -63,13 +63,18 @@ def warmup_beatnet_service(timeout: float = 90.0) -> bool:
     real analyses can run at full speed.
 
     Args:
-        timeout: Maximum time to wait for warm-up analysis (default: 90s)
-                 Increased for M1 and less performant Macs with XProtect delays
+        timeout: Maximum time to wait for warm-up analysis (default: 240s)
+                 Increased to handle XProtect delays, resource contention
+                 (e.g., when separation is running), and system load.
+                 Warmup is non-critical and runs in background, so longer
+                 timeout is acceptable.
 
     Returns:
         True if warm-up successful, False if failed or BeatNet unavailable
 
-    WHY: Prevents 40+ second XProtect delays on first real beat detection
+    WHY: Prevents 40+ second XProtect delays on first real beat detection.
+         Longer timeout handles resource contention when other processes
+         (e.g., separation) are using MPS/GPU simultaneously.
     """
     global _warmup_complete, _warmup_in_progress
 

@@ -44,6 +44,46 @@ def get_user_dir():
         return Path(__file__).parent
 
 
+def get_default_output_dir(subdirectory: str = "separated") -> Path:
+    """
+    Get default output directory following macOS conventions.
+
+    WHY: macOS apps typically save user files to ~/Music for audio files.
+         This provides a consistent, user-friendly location for both
+         packaged and development modes.
+
+    Args:
+        subdirectory: Subdirectory name (e.g., "separated", "loops", "recordings")
+
+    Returns:
+        Path to default output directory (e.g., ~/Music/StemSeparator/separated)
+        Directory is created if it doesn't exist.
+    """
+    if sys.platform == "darwin":  # macOS
+        # Use Music folder for audio files (macOS convention)
+        music_folder = Path.home() / "Music"
+        if music_folder.exists():
+            output_dir = music_folder / "StemSeparator" / subdirectory
+        else:
+            # Fallback to Documents if Music doesn't exist
+            output_dir = Path.home() / "Documents" / "StemSeparator" / subdirectory
+    elif sys.platform == "win32":  # Windows
+        # Use Music folder on Windows
+        music_folder = Path.home() / "Music"
+        if music_folder.exists():
+            output_dir = music_folder / "StemSeparator" / subdirectory
+        else:
+            # Fallback to Documents
+            output_dir = Path.home() / "Documents" / "StemSeparator" / subdirectory
+    else:  # Linux and others
+        # Use Documents as fallback
+        output_dir = Path.home() / "Documents" / "StemSeparator" / subdirectory
+
+    # Create directory structure if it doesn't exist
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return output_dir
+
+
 # Basis-Pfade
 BASE_DIR = get_base_dir()
 USER_DIR = get_user_dir()
@@ -314,3 +354,10 @@ MAX_FILE_SIZE_MB = 500  # Harte Grenze (kann überschrieben werden)
 RECORDING_SAMPLE_RATE = 44100
 RECORDING_CHANNELS = 2  # Stereo
 RECORDING_FORMAT = "float32"  # Internes Format
+
+# Default Output Directories
+# WHY: Provide consistent default locations for user files in ~/Music/StemSeparator/
+#      Works for both packaged and development modes
+DEFAULT_SEPARATED_DIR = get_default_output_dir("separated")
+DEFAULT_LOOPS_DIR = get_default_output_dir("loops")
+DEFAULT_RECORDINGS_DIR = get_default_output_dir("recordings")

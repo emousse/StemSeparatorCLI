@@ -31,6 +31,8 @@ from PySide6.QtGui import QPalette, QColor
 from ui.app_context import AppContext
 from core.recorder import RecordingState, RecordingInfo
 from ui.theme import ThemeManager
+from config import get_default_output_dir, DEFAULT_RECORDINGS_DIR
+from utils.path_utils import resolve_output_path
 
 
 class RecordingWidget(QWidget):
@@ -115,7 +117,9 @@ class RecordingWidget(QWidget):
         output_path_layout = QHBoxLayout()
         output_path_layout.addWidget(QLabel("Save to:"))
         self.output_path = QLineEdit()
-        self.output_path.setPlaceholderText("Default: temp/recordings")
+        # Show default path in placeholder (will be resolved to absolute when used)
+        default_path = get_default_output_dir("recordings")
+        self.output_path.setPlaceholderText(f"Default: {default_path}")
         output_path_layout.addWidget(self.output_path, stretch=1)
 
         self.btn_output_browse = QPushButton("Browse...")
@@ -435,7 +439,17 @@ class RecordingWidget(QWidget):
             import time
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             save_dir = Path(self.output_path.text())
+            # Resolve to absolute path and ensure directory exists
+            save_dir = resolve_output_path(save_dir, DEFAULT_RECORDINGS_DIR)
             save_path = save_dir / f"recording_{timestamp}.wav"
+        else:
+            # Use default recordings directory
+            import time
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            save_dir = get_default_output_dir("recordings")
+            save_path = save_dir / f"recording_{timestamp}.wav"
+        
+        self.ctx.logger().info(f"Recording save path: {save_path}")
 
         info = self.recorder.stop_recording(save_path=save_path)
 

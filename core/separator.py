@@ -26,6 +26,8 @@ from config import (
     EXPORT_BIT_DEPTH,
     QUALITY_PRESETS,
     DEFAULT_QUALITY_PRESET,
+    get_default_output_dir,
+    DEFAULT_SEPARATED_DIR,
 )
 from core.model_manager import get_model_manager
 from core.device_manager import get_device_manager
@@ -33,6 +35,7 @@ from core.chunk_processor import get_chunk_processor
 from utils.logger import get_logger
 from utils.error_handler import error_handler, SeparationError
 from utils.file_manager import get_file_manager
+from utils.path_utils import resolve_output_path
 
 logger = get_logger()
 
@@ -180,8 +183,14 @@ class Separator:
             )
 
         # Output-Verzeichnis
-        output_dir = output_dir or self.output_dir
-        output_dir.mkdir(parents=True, exist_ok=True)
+        # Resolve to absolute path and use default if None
+        if output_dir is None:
+            output_dir = get_default_output_dir("separated")
+        else:
+            # Resolve to absolute path and ensure directory exists
+            output_dir = resolve_output_path(output_dir, DEFAULT_SEPARATED_DIR)
+        
+        self.logger.info(f"Output directory: {output_dir}")
 
         preset_info = QUALITY_PRESETS[quality_preset]
         self.logger.info(

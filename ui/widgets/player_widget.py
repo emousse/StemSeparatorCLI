@@ -43,6 +43,8 @@ from ui.theme import ThemeManager
 from ui.dialogs import ExportSettingsDialog, LoopExportDialog
 from ui.widgets.loop_waveform_widget import LoopWaveformWidget
 from utils import beat_detection
+from config import get_default_output_dir, DEFAULT_LOOPS_DIR, DEFAULT_SEPARATED_DIR
+from utils.path_utils import resolve_output_path
 
 # Forward reference for type hinting
 from typing import TYPE_CHECKING
@@ -3296,7 +3298,9 @@ class PlayerWidget(QWidget):
             if not output_dir:
                 return
 
-            output_path = Path(output_dir)
+            # Resolve to absolute path and ensure directory exists
+            output_path = resolve_output_path(Path(output_dir), DEFAULT_SEPARATED_DIR)
+            self.ctx.logger().info(f"Export output path: {output_path}")
 
         else:
             # Mixed audio (with or without chunking) - ask for file
@@ -3310,7 +3314,10 @@ class PlayerWidget(QWidget):
             if not save_path:
                 return
 
+            # Resolve to absolute path (for file, ensure parent directory exists)
             output_path = Path(save_path)
+            output_path = resolve_output_path(output_path.parent, DEFAULT_SEPARATED_DIR) / output_path.name
+            self.ctx.logger().info(f"Export output path: {output_path}")
 
         # Execute export based on settings
         success = False
@@ -3577,7 +3584,9 @@ class PlayerWidget(QWidget):
             if not output_dir:
                 return
 
-            output_path = Path(output_dir)
+            # Resolve to absolute path and ensure directory exists
+            output_path = resolve_output_path(Path(output_dir), DEFAULT_LOOPS_DIR)
+            self.ctx.logger().info(f"Loop export output path: {output_path}")
 
             # Import required modules
             import tempfile

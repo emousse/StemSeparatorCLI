@@ -35,8 +35,10 @@ from PySide6.QtCore import Qt, Signal, Slot, QObject
 from ui.app_context import AppContext
 from ui.widgets.common import DragDropListWidget
 from ui.widgets.waveform_widget import WaveformWidget
-from config import ENSEMBLE_CONFIGS
+from config import ENSEMBLE_CONFIGS, DEFAULT_SEPARATED_DIR, get_default_output_dir
 from ui.theme import ThemeManager
+from utils.path_utils import resolve_output_path
+from ui.settings_manager import get_settings_manager
 
 
 class UploadWidget(QWidget):
@@ -155,7 +157,9 @@ class UploadWidget(QWidget):
         output_layout = QHBoxLayout()
         output_layout.addWidget(QLabel("Output:"))
         self.output_path = QLineEdit()
-        self.output_path.setPlaceholderText("Default: temp/separated")
+        # Show default path in placeholder (will be resolved to absolute when used)
+        default_path = get_default_output_dir("separated")
+        self.output_path.setPlaceholderText(f"Default: {default_path}")
         output_layout.addWidget(self.output_path, stretch=1)
         self.btn_output_browse = QPushButton("Browse...")
         output_layout.addWidget(self.btn_output_browse)
@@ -456,9 +460,17 @@ class UploadWidget(QWidget):
         original_file = selected_items[0].data(Qt.UserRole)
         model_id = self.model_combo.currentData()
 
+        # Resolve output directory to absolute path
         output_dir = None
         if self.output_path.text().strip():
             output_dir = Path(self.output_path.text())
+        else:
+            # Use default from settings if not specified
+            output_dir = get_settings_manager().get_output_directory()
+
+        # Resolve to absolute path and ensure directory exists
+        output_dir = resolve_output_path(output_dir, DEFAULT_SEPARATED_DIR)
+        self.ctx.logger().info(f"Output directory resolved to: {output_dir}")
 
         # Check if ensemble mode is enabled
         use_ensemble = self.ensemble_checkbox.isChecked()
@@ -498,9 +510,17 @@ class UploadWidget(QWidget):
         original_file = selected_items[0].data(Qt.UserRole)
         model_id = self.model_combo.currentData()
 
+        # Resolve output directory to absolute path
         output_dir = None
         if self.output_path.text().strip():
             output_dir = Path(self.output_path.text())
+        else:
+            # Use default from settings if not specified
+            output_dir = get_settings_manager().get_output_directory()
+
+        # Resolve to absolute path and ensure directory exists
+        output_dir = resolve_output_path(output_dir, DEFAULT_SEPARATED_DIR)
+        self.ctx.logger().info(f"Output directory resolved to: {output_dir}")
 
         # Get ensemble settings
         use_ensemble = self.ensemble_checkbox.isChecked()

@@ -41,6 +41,7 @@ import numpy as np
 import soundfile as sf
 
 from utils.logger import get_logger
+from utils.path_utils import resolve_output_path
 from utils.loop_math import (
     compute_samples_per_chunk,
     compute_chunk_duration_seconds,
@@ -55,6 +56,7 @@ from utils.audio_processing import (
     stereo_to_mono,
     find_nearest_zero_crossing,
 )
+from config import get_default_output_dir, DEFAULT_LOOPS_DIR
 
 logger = get_logger()
 
@@ -278,7 +280,9 @@ def export_sampler_loops(
     )
 
     # Setup output directory and file naming
-    output_dir.mkdir(parents=True, exist_ok=True)
+    # Resolve to absolute path and ensure directory exists
+    output_dir = resolve_output_path(output_dir, DEFAULT_LOOPS_DIR)
+    logger.info(f"Exporting loops to: {output_dir}")
 
     # Use common_filename if provided, otherwise fall back to input_path.stem
     if common_filename:

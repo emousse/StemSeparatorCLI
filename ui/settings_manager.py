@@ -16,9 +16,13 @@ from config import (
     CHUNK_LENGTH_SECONDS,
     TEMP_DIR,
     BASE_DIR,
+    USER_DIR,
     DEFAULT_QUALITY_PRESET,
+    get_default_output_dir,
+    DEFAULT_SEPARATED_DIR,
 )
 from utils.logger import get_logger
+from utils.path_utils import resolve_output_path
 
 logger = get_logger()
 
@@ -31,7 +35,10 @@ class SettingsManager:
     """
 
     def __init__(self):
-        self.settings_file = BASE_DIR / "user_settings.json"
+        # Use USER_DIR for settings file (writable location)
+        # WHY: In packaged apps, BASE_DIR is read-only (app bundle)
+        #      USER_DIR is always writable (~/Library/Application Support/StemSeparator on macOS)
+        self.settings_file = USER_DIR / "user_settings.json"
         self.settings: Dict[str, Any] = {}
         self._load_defaults()
         self._load_from_file()
@@ -40,13 +47,15 @@ class SettingsManager:
 
     def _load_defaults(self):
         """Load default settings from config.py"""
+        # Use new default output directory: ~/Music/StemSeparator/separated
+        default_output_dir = get_default_output_dir("separated")
         self.settings = {
             "language": DEFAULT_LANGUAGE,
             "default_model": DEFAULT_MODEL,
             "quality_preset": DEFAULT_QUALITY_PRESET,
             "use_gpu": USE_GPU,
             "chunk_length_seconds": CHUNK_LENGTH_SECONDS,
-            "output_directory": str(TEMP_DIR / "separated"),
+            "output_directory": str(default_output_dir),
             "recording_sample_rate": 44100,
             "recording_channels": 2,
         }
@@ -61,8 +70,44 @@ class SettingsManager:
             with open(self.settings_file, "r", encoding="utf-8") as f:
                 user_settings = json.load(f)
 
+            # Migrate old default output directory to new default
+            # WHY: Old default was TEMP_DIR/separated, new default is ~/Music/StemSeparator/separated
+            needs_migration = False
+            if "output_directory" in user_settings:
+                old_path_str = user_settings["output_directory"]
+                
+                # Check if this matches the old default pattern
+                old_default_pattern = TEMP_DIR / "separated"
+                old_default_resolved = old_default_pattern.resolve()
+                
+                if old_path_str:
+                    try:
+                        old_path_resolved = Path(old_path_str).resolve()
+                        # If saved path matches old default, migrate to new default
+                        if old_path_resolved == old_default_resolved:
+                            logger.info(
+                                f"Migrating output directory from old default "
+                                f"({old_path_resolved}) to new default ({DEFAULT_SEPARATED_DIR})"
+                            )
+                            user_settings["output_directory"] = str(DEFAULT_SEPARATED_DIR)
+                            needs_migration = True
+                    except (OSError, RuntimeError):
+                        # Path resolution failed, might be relative or invalid
+                        # Check if it's the old relative pattern
+                        if "temp/separated" in old_path_str or "temp\\separated" in old_path_str:
+                            logger.info(
+                                f"Migrating relative output directory "
+                                f"({old_path_str}) to new default ({DEFAULT_SEPARATED_DIR})"
+                            )
+                            user_settings["output_directory"] = str(DEFAULT_SEPARATED_DIR)
+                            needs_migration = True
+
             # Update settings with user values
             self.settings.update(user_settings)
+            
+            # Save migrated settings if needed
+            if needs_migration:
+                self.save()
             logger.info(f"Loaded user settings from {self.settings_file}")
 
         except Exception as e:
@@ -126,13 +171,30 @@ class SettingsManager:
         self.settings["chunk_length_seconds"] = seconds
 
     def get_output_directory(self) -> Path:
-        """Get output directory"""
-        path_str = self.settings.get("output_directory", str(TEMP_DIR / "separated"))
-        return Path(path_str)
+        """
+        Get output directory, resolved to absolute path.
+
+        WHY: Ensures path is absolute and directory exists, preventing issues
+             with relative paths in packaged apps.
+        """
+        path_str = self.settings.get("output_directory", str(DEFAULT_SEPARATED_DIR))
+        path = Path(path_str) if path_str else None
+
+        # Resolve to absolute path, using default if path is invalid
+        resolved = resolve_output_path(path, DEFAULT_SEPARATED_DIR)
+        logger.debug(f"Output directory resolved to: {resolved}")
+        return resolved
 
     def set_output_directory(self, path: Path):
-        """Set output directory"""
-        self.settings["output_directory"] = str(path)
+        """
+        Set output directory, ensuring it's resolved to absolute path.
+
+        WHY: Saves absolute paths to prevent issues when loading settings later.
+        """
+        # Resolve to absolute before saving
+        resolved = resolve_output_path(path, DEFAULT_SEPARATED_DIR)
+        self.settings["output_directory"] = str(resolved)
+        logger.debug(f"Output directory set to: {resolved}")
 
     def get_quality_preset(self) -> str:
         """Get quality preset"""

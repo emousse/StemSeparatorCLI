@@ -35,6 +35,8 @@ from ui.app_context import AppContext
 from ui.theme import ThemeManager
 from utils.loop_math import get_minimum_bpm, is_valid_for_sampler
 from core.background_stretch_manager import BackgroundStretchManager, get_optimal_worker_count
+from config import get_default_output_dir, DEFAULT_LOOPS_DIR
+from utils.path_utils import resolve_output_path
 
 
 class LoopExportSettings(NamedTuple):
@@ -598,7 +600,9 @@ class ExportLoopsWidget(QWidget):
         if not output_dir:
             return
 
-        output_path = Path(output_dir)
+        # Resolve to absolute path and ensure directory exists
+        output_path = resolve_output_path(Path(output_dir), DEFAULT_LOOPS_DIR)
+        self.ctx.logger().info(f"Loop export output path: {output_path}")
         self._execute_export(output_path, settings)
 
     def _execute_export(self, output_path: Path, settings: LoopExportSettings):
@@ -939,6 +943,10 @@ class ExportLoopsWidget(QWidget):
         This bypasses the traditional chunking export and directly exports
         the pre-stretched loops from the cache.
         """
+        # Resolve to absolute path and ensure directory exists
+        output_path = resolve_output_path(output_path, DEFAULT_LOOPS_DIR)
+        self.ctx.logger().info(f"Exporting stretched loops to: {output_path}")
+        
         try:
             manager = self._get_stretch_manager()
             if not manager:
