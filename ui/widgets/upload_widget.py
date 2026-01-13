@@ -54,8 +54,8 @@ class UploadWidget(QWidget):
 
     # Signal emitted when user wants to queue a file
     file_queued = Signal(
-        Path, str, bool, str
-    )  # (file_path, model_id, use_ensemble, ensemble_config)
+        Path, str, bool, str, object
+    )  # (file_path, model_id, use_ensemble, ensemble_config, output_dir)
     # Signal to request queue processing start
     start_queue_requested = Signal()
 
@@ -479,7 +479,7 @@ class UploadWidget(QWidget):
         file_to_process = self._create_trimmed_file(original_file)
 
         # Add to queue
-        self.file_queued.emit(file_to_process, model_id, use_ensemble, ensemble_config)
+        self.file_queued.emit(file_to_process, model_id, use_ensemble, ensemble_config, output_dir)
 
         # Notify user via QueueDrawer (auto-shows)
         # if self.window().statusBar():
@@ -498,6 +498,10 @@ class UploadWidget(QWidget):
         original_file = selected_items[0].data(Qt.UserRole)
         model_id = self.model_combo.currentData()
 
+        output_dir = None
+        if self.output_path.text().strip():
+            output_dir = Path(self.output_path.text())
+
         # Get ensemble settings
         use_ensemble = self.ensemble_checkbox.isChecked()
         ensemble_config = self.model_combo.currentData() if use_ensemble else ""
@@ -514,7 +518,7 @@ class UploadWidget(QWidget):
         # if self.window().statusBar():
         #    self.window().statusBar().showMessage(f"Added to queue: {file_to_queue.name}", 5000)
 
-        self.file_queued.emit(file_to_queue, model_id, use_ensemble, ensemble_config)
+        self.file_queued.emit(file_to_queue, model_id, use_ensemble, ensemble_config, output_dir)
 
     def _create_trimmed_file(self, original_file: Path) -> Optional[Path]:
         """

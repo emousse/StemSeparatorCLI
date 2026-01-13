@@ -22,6 +22,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QScrollArea,
     QFrame,
+    QFileDialog,
+    QLineEdit,
 )
 from PySide6.QtCore import Qt, Signal, Slot, QTimer
 from PySide6.QtGui import QPalette, QColor
@@ -107,6 +109,25 @@ class RecordingWidget(QWidget):
 
         main_layout.addWidget(device_card)
 
+        # Output Settings Card
+        output_card, output_layout = self._create_card("Output Settings")
+
+        output_path_layout = QHBoxLayout()
+        output_path_layout.addWidget(QLabel("Save to:"))
+        self.output_path = QLineEdit()
+        self.output_path.setPlaceholderText("Default: temp/recordings")
+        output_path_layout.addWidget(self.output_path, stretch=1)
+
+        self.btn_output_browse = QPushButton("Browse...")
+        ThemeManager.set_widget_property(
+            self.btn_output_browse, "buttonStyle", "secondary"
+        )
+        self.btn_output_browse.setToolTip("Select output directory for recordings")
+        output_path_layout.addWidget(self.btn_output_browse)
+
+        output_layout.addLayout(output_path_layout)
+        main_layout.addWidget(output_card)
+
         # Recording Controls Card
         controls_card, controls_layout = self._create_card("Recording")
 
@@ -185,6 +206,7 @@ class RecordingWidget(QWidget):
     def _connect_signals(self):
         """Connect button signals to handlers"""
         self.btn_refresh_devices.clicked.connect(self._refresh_devices)
+        self.btn_output_browse.clicked.connect(self._on_output_browse_clicked)
         self.btn_start.clicked.connect(self._on_start_clicked)
         self.btn_pause.clicked.connect(self._on_pause_clicked)
         self.btn_stop.clicked.connect(self._on_stop_clicked)
@@ -241,6 +263,15 @@ class RecordingWidget(QWidget):
 
         device_count = len(devices) + (1 if screencapture_available else 0)
         self.ctx.logger().info(f"Refreshed devices: {device_count} found")
+
+    @Slot()
+    def _on_output_browse_clicked(self):
+        """Select output directory for recordings"""
+        directory = QFileDialog.getExistingDirectory(
+            self, "Select Output Directory"
+        )
+        if directory:
+            self.output_path.setText(directory)
 
     @Slot(int)
     def _on_device_changed(self, index: int):
@@ -398,7 +429,15 @@ class RecordingWidget(QWidget):
         """
         self.update_timer.stop()
 
-        info = self.recorder.stop_recording()
+        # Determine save path from UI or use default
+        save_path = None
+        if self.output_path.text().strip():
+            import time
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            save_dir = Path(self.output_path.text())
+            save_path = save_dir / f"recording_{timestamp}.wav"
+
+        info = self.recorder.stop_recording(save_path=save_path)
 
         if info:
             log_msg = (
