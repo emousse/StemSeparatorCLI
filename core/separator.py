@@ -551,8 +551,14 @@ class Separator:
             # WHY: In packaged apps, subprocess runs from inside bundle (sys._MEIPASS)
             #      causing audio-separator to write files to wrong location
             # FIX: Set cwd to output directory so all paths resolve correctly
-            subprocess_kwargs["cwd"] = str(output_dir)
-            self.logger.info(f"Subprocess working directory set to: {output_dir}")
+            # NOTE: Only for frozen apps! In dev mode, we need cwd to be project root
+            #       so that `python -m core.separation_subprocess` can find the module
+            if getattr(sys, "frozen", False):
+                subprocess_kwargs["cwd"] = str(output_dir)
+                self.logger.info(f"Subprocess working directory set to: {output_dir}")
+            else:
+                # Dev mode: keep project root as cwd for module discovery
+                self.logger.info(f"Dev mode: using project root as working directory")
 
             process = subprocess.Popen(cmd, **subprocess_kwargs)
 
